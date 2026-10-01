@@ -1,0 +1,9 @@
+{
+  "name": "uploadcare-title-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Animated video title generator for Uploadcare",
+  "scripts": {
+    "start": "node server.mjs . 5173"
+  }
+}
