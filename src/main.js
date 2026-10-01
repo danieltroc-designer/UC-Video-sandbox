@@ -187,6 +187,7 @@ async function runExport() {
       settings: { ...state }, logo, background: currentBg, width: w, height: h, fps: state.fps,
       signal: exportAbort.signal,
       onProgress: (p) => { bar.style.width = `${p * 100}%`; pct.textContent = `${Math.round(p * 100)}%`; },
+      onStatus: (msg) => { status.textContent = msg; },
     });
     downloadBlob(blob, exportFilename(blob.type.includes('mp4') ? 'mp4' : 'webm'));
     modal.hidden = true;
