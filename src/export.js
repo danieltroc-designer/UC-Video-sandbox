@@ -47,6 +47,7 @@ async function isSupported({ label, ...config }) {
  * Renders every frame offline (never dropping frames) and encodes to MP4 via
  * WebCodecs. If the browser's encoder fails it retries with more conservative
  * settings, and finally falls back to a real-time MediaRecorder capture.
+ * Resolves to { blob, method }; never resolves with an empty video.
  */
 export async function exportVideo({ settings, logo, background, width, height, fps, onProgress, onStatus, signal }) {
   const canvas = document.createElement('canvas');
@@ -102,9 +103,17 @@ async function encodeOffline({ canvas, ctx, renderer, duration, fps, onProgress,
     fastStart: 'in-memory',
   });
   let failure = null;
+  let chunks = 0;
   const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => { failure = e; },
+    output: (chunk, meta) => {
+      try {
+        muxer.addVideoChunk(chunk, meta);
+        chunks++;
+      } catch (e) {
+        failure ??= e;
+      }
+    },
+    error: (e) => { failure ??= e; },
   });
 
   const encodeFrame = (i) => {
@@ -123,6 +132,7 @@ async function encodeOffline({ canvas, ctx, renderer, duration, fps, onProgress,
     encodeFrame(0);
     await encoder.flush();
     if (failure) throw failure;
+    if (!chunks) throw new Error(`${label} encoder produced no output`);
 
     for (let i = 1; i < frames; i++) {
       if (signal?.aborted) throw abortError();
@@ -133,9 +143,10 @@ async function encodeOffline({ canvas, ctx, renderer, duration, fps, onProgress,
     }
     await encoder.flush();
     if (failure) throw failure;
+    if (chunks < frames * 0.9) throw new Error(`${label} encoder dropped frames (${chunks}/${frames})`);
     muxer.finalize();
     onProgress?.(1);
-    return new Blob([target.buffer], { type: 'video/mp4' });
+    return { blob: new Blob([target.buffer], { type: 'video/mp4' }), method: `${label} (${config.codec})` };
   } catch (err) {
     // A closed encoder throws a generic InvalidStateError; report the real cause.
     throw signal?.aborted ? abortError() : failure ?? err;
@@ -154,7 +165,7 @@ async function recordRealtime({ canvas, ctx, renderer, duration, fps, bitrate, o
   const stopped = new Promise((r) => (rec.onstop = r));
 
   renderer.render(ctx, 0);
-  rec.start();
+  rec.start(500); // timeslice: collect data as we go rather than only on stop
   const t0 = performance.now();
   try {
     await new Promise((resolve, reject) => {
@@ -173,14 +184,7 @@ async function recordRealtime({ canvas, ctx, renderer, duration, fps, bitrate, o
     await stopped;
     stream.getTracks().forEach((tr) => tr.stop());
   }
-  return new Blob(chunks, { type: (rec.mimeType || type || 'video/webm').split(';')[0] });
-}
-
-export function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  const blob = new Blob(chunks, { type: (rec.mimeType || type || 'video/webm').split(';')[0] });
+  if (blob.size < 1024) throw new Error('The browser recorded an empty video — try Chrome.');
+  return { blob, method: `real-time recording (${blob.type})` };
 }

@@ -513,7 +513,8 @@ input[type='color']::-moz-color-swatch { border: 1px solid var(--line-2); border
 .modal-status { margin: 0; color: var(--muted); font-size: 12px; }
 .modal.is-error .modal-status { color: #ff8a7a; }
 .modal.is-error .progress-bar { background: #ff8a7a; }
-.modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+a.btn { text-decoration: none; }
 
 @keyframes fade { from { opacity: 0; } }
 

@@ -2,7 +2,7 @@ import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS } from './settings.js';
 import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
 import { buildSidebar } from './controls.js';
-import { exportVideo, downloadBlob } from './export.js';
+import { exportVideo } from './export.js';
 
 const STORE_KEY = 'uc-title-studio:v1';
 const PREVIEW_MAX = 1920; // preview renders at most this many px on the long edge
@@ -168,35 +168,70 @@ function exportFilename(ext) {
   return `uploadcare-${slug}-${w}x${h}.${ext}`;
 }
 
+// Object URLs live until they're replaced. Revoking on a timer made Safari save
+// an empty file when its "Allow downloads?" prompt was answered too late.
+const liveUrls = new Map();
+function blobUrl(kind, blob) {
+  if (liveUrls.has(kind)) URL.revokeObjectURL(liveUrls.get(kind));
+  const url = URL.createObjectURL(blob);
+  liveUrls.set(kind, url);
+  return url;
+}
+
+function triggerDownload(url, filename) {
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
 async function runExport() {
   if (exportAbort) return;
   const [w, h] = outputSize();
   const modal = $('#exportModal');
+  const title = $('#exportTitle');
   const bar = $('#exportBar');
   const pct = $('#exportPct');
   const status = $('#exportStatus');
+  const link = $('#exportDownload');
+  const close = $('#exportCancel');
   setPlaying(false);
   modal.hidden = false;
-  modal.classList.remove('is-error');
+  modal.classList.remove('is-error', 'is-done');
+  title.textContent = 'Exporting video';
   status.textContent = `Rendering ${w}×${h} at ${state.fps} fps`;
   bar.style.width = '0%';
   pct.textContent = '0%';
+  link.hidden = true;
+  close.textContent = 'Cancel';
   exportAbort = new AbortController();
   try {
-    const blob = await exportVideo({
+    const { blob, method } = await exportVideo({
       settings: { ...state }, logo, background: currentBg, width: w, height: h, fps: state.fps,
       signal: exportAbort.signal,
       onProgress: (p) => { bar.style.width = `${p * 100}%`; pct.textContent = `${Math.round(p * 100)}%`; },
       onStatus: (msg) => { status.textContent = msg; },
     });
-    downloadBlob(blob, exportFilename(blob.type.includes('mp4') ? 'mp4' : 'webm'));
-    modal.hidden = true;
+    // Download from a real click: the export took a while, so the original
+    // click no longer counts as a user gesture and Safari may block or prompt.
+    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    Object.assign(link, { href: blobUrl('video', blob), download: exportFilename(ext) });
+    link.lastChild.textContent = ` Download ${ext.toUpperCase()}`;
+    link.hidden = false;
+    modal.classList.add('is-done');
+    title.textContent = 'Video ready';
+    bar.style.width = '100%';
+    pct.textContent = `${(blob.size / 1e6).toFixed(1)} MB`;
+    status.textContent = `${w}×${h} · ${state.fps} fps · ${method}`;
+    close.textContent = 'Close';
+    link.focus();
   } catch (err) {
     if (err.name === 'AbortError') modal.hidden = true;
     else {
       console.error(err);
       modal.classList.add('is-error');
       status.textContent = `Export failed: ${err.message}`;
+      close.textContent = 'Close';
     }
   } finally {
     exportAbort = null;
@@ -212,7 +247,8 @@ function snapshot() {
   r.setBackground(currentBg);
   r.prepare({ ...state }, w, h);
   r.render(c.getContext('2d', { alpha: false }), time);
-  c.toBlob((blob) => blob && downloadBlob(blob, exportFilename('png').replace('.png', `-${time.toFixed(2)}s.png`)), 'image/png');
+  const name = exportFilename('png').replace('.png', `-${time.toFixed(2)}s.png`);
+  c.toBlob((blob) => blob && triggerDownload(blobUrl('png', blob), name), 'image/png');
 }
 
 // --------------------------------------------------------------------- boot
