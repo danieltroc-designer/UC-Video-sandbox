@@ -1,4 +1,7 @@
-import { clamp, lerp, progress, ease, mixColor, rgba, hash } from './easing.js';
+import { clamp, lerp, progress, ease, cubicBezier, mixColor, rgba, hash } from './easing.js';
+import { GLYPH_MOTIONS, FILL_CURVE } from './glyph-motions.js';
+
+const fillEase = cubicBezier(...FILL_CURVE);
 
 // Inter's cap height as a fraction of the em — used to centre lines optically.
 const CAP = 0.727;
@@ -41,7 +44,7 @@ export function createRenderer({ logo }) {
   let bgImage = null;
   let bgBase = null, bgHi = null, bakeKey = '';
   const layers = new Map();
-  const delayCache = new Map();
+  const motionCache = new Map();
   const grain = makeGrainTiles(4, 256);
   const measure = makeCanvas(8, 8).getContext('2d');
 
@@ -260,12 +263,14 @@ export function createRenderer({ logo }) {
     let end = tl.bg.end;
 
     if (L.logo) {
+      const gm = glyphMotion();
       const g = seg('glyph', 'Mark', 0.12 * k);
-      g.spread = 0.62 * k * st;
-      g.dur = 0.5 * k;
-      g.end = g.start + g.spread + g.dur;
+      g.delays = gm.delays.map((d) => d * k * st);
+      g.dur = gm.fill * k;
+      g.end = g.start + gm.spread * k * st + g.dur;
 
-      const w = seg('word', 'Wordmark', g.end - 0.3 * k);
+      // Quick builds (ripple) still get a beat on screen before the wordmark.
+      const w = seg('word', 'Wordmark', Math.max(g.end - 0.3 * k, g.start + 0.8 * k));
       w.stagger = 0.045 * k * st;
       w.dur = 0.62 * k;
       w.end = w.start + w.stagger * (logo.letters.length - 1) + w.dur;
@@ -309,22 +314,29 @@ export function createRenderer({ logo }) {
     return tl;
   }
 
-  function squareDelays(pattern) {
-    if (delayCache.has(pattern)) return delayCache.get(pattern);
-    const { cx, cy } = logo.glyph;
-    const raw = logo.squares.map((q, i) => {
-      const dx = q.cx - cx, dy = q.cy - cy;
-      switch (pattern) {
-        case 'radial': return Math.hypot(dx, dy);
-        case 'diagonal': return q.cx + q.cy;
-        case 'rise': return -q.cy + q.cx * 0.12;
-        case 'random': return hash(i * 31 + 7);
-        default: return (Math.atan2(dy, dx) + Math.PI * 2.5) % (Math.PI * 2); // spin: clockwise from 12 o'clock
-      }
-    });
-    const lo = Math.min(...raw), hi = Math.max(...raw);
-    const out = raw.map((v) => (hi > lo ? (v - lo) / (hi - lo) : 0));
-    delayCache.set(pattern, out);
+  // Per-square start delays and fill duration (seconds, before speed/stagger)
+  // for the chosen mark animation.
+  function glyphMotion() {
+    const key = `${s.glyphPattern}|${s.glyphStyle}`;
+    if (motionCache.has(key)) return motionCache.get(key);
+    const g = logo.glyph;
+    const table = GLYPH_MOTIONS[s.glyphPattern];
+    let delays;
+    if (table) {
+      // The loaders share the glyph's 8×8 grid, so map squares onto it directly.
+      const pitch = (g.w - logo.squares[0].w) / 7;
+      delays = logo.squares.map((q) =>
+        (table.delays[Math.round((q.y - g.y) / pitch)]?.[Math.round((q.x - g.x) / pitch)] ?? 0) / 1000);
+    } else {
+      const raw = logo.squares.map((q, i) => (s.glyphPattern === 'random'
+        ? hash(i * 31 + 7)
+        : (Math.atan2(q.cy - g.cy, q.cx - g.cx) + Math.PI * 2.5) % (Math.PI * 2))); // spin: clockwise from 12 o'clock
+      const lo = Math.min(...raw), hi = Math.max(...raw);
+      delays = raw.map((v) => ((v - lo) / (hi - lo || 1)) * 0.62);
+    }
+    const fill = s.glyphStyle === 'pop' ? 0.5 : table?.fill ?? 0.34;
+    const out = { delays, fill, spread: Math.max(...delays) };
+    motionCache.set(key, out);
     return out;
   }
 
@@ -354,18 +366,35 @@ export function createRenderer({ logo }) {
 
   function camera(t) {
     const p = ease.outQuad(clamp(t / Math.max(T.duration, 0.001)));
-    const zoom = 1.02 + (s.bgZoom / 100) * p;
-    const room = ((zoom - 1) * W) / 2;
-    const px = clamp((p - 0.5) * s.bgDrift * 0.02 * W, -room, room);
-    const py = clamp((0.5 - p) * s.bgDrift * 0.01 * H, -room, room);
-    return { zoom, px, py };
+    const amp = s.bgFlow * 9 * u; // how far the streaks undulate, in px
+    // Extra zoom gives the flow headroom so the frame edges never show.
+    const zoom = 1.02 + (2.2 * amp) / H + (s.bgZoom / 100) * p;
+    const roomX = ((zoom - 1) * W) / 2;
+    const roomY = ((zoom - 1) * H) / 2 - amp * zoom;
+    const px = clamp((p - 0.5) * s.bgDrift * 0.02 * W, -roomX, roomX);
+    const py = clamp((0.5 - p) * s.bgDrift * 0.01 * H, -roomY, roomY);
+    return { zoom, px, py, amp, phase: t * s.bgFlowSpeed };
   }
 
   function drawCam(c, img, cam) {
     c.save();
     c.translate(W / 2 + cam.px, H / 2 + cam.py);
     c.scale(cam.zoom, cam.zoom);
-    c.drawImage(img, -W / 2, -H / 2, W, H);
+    if (cam.amp < 0.05) {
+      c.drawImage(img, -W / 2, -H / 2, W, H);
+    } else {
+      // Fabric-like flow: thin vertical strips, each nudged up or down by two
+      // slow, overlapping sine waves. Strips overlap by 1px to hide seams.
+      const strip = Math.max(4, Math.round(6 * u));
+      const TAU = Math.PI * 2;
+      for (let x = 0; x < W; x += strip) {
+        const sw = Math.min(strip + 1, W - x);
+        const nx = (x + strip / 2) / W;
+        const dy = cam.amp * (0.65 * Math.sin(TAU * (nx * 0.8 + cam.phase / 11))
+          + 0.35 * Math.sin(TAU * (nx * 1.9 - cam.phase / 7.5) + 1.3));
+        c.drawImage(img, x, 0, sw, H, x - W / 2, -H / 2 + dy, sw, H);
+      }
+    }
     c.restore();
   }
 
@@ -443,19 +472,28 @@ export function createRenderer({ logo }) {
     const oy = cy - logo.bounds.cy * sc;
     c.setTransform(sc, 0, 0, sc, ox, oy);
 
-    // Mark: squares pop in following the chosen pattern, flashing white → brand.
+    // Mark. Fill: an empty grid fades up, then squares fill with brand colour
+    // like the loaders. Pop: squares scale in, flashing white → brand.
     const gp = progress(t, G.start, G.end);
-    const gs = lerp(0.9, 1, ease.outCubic(gp));
+    const pop = s.glyphStyle === 'pop';
+    const gs = pop ? lerp(0.9, 1, ease.outCubic(gp)) : 1;
+    const ghost = pop ? 0 : ease.outCubic(progress(t, 0, G.start + 0.3 * T.k));
     const gcx = logo.glyph.cx, gcy = logo.glyph.cy;
-    const delays = squareDelays(s.glyphPattern);
     logo.squares.forEach((q, i) => {
-      const a0 = G.start + delays[i] * G.spread;
+      const a0 = G.start + G.delays[i];
       const p = progress(t, a0, a0 + G.dur);
-      if (p <= 0) return;
-      const k = Math.max(0, ease.outBack(p, 2.2));
-      const half = (q.size / 2) * k * gs;
-      c.globalAlpha = clamp(p * 6);
-      c.fillStyle = mixColor('#fffbea', s.glyphColor, ease.outCubic(clamp((p - 0.15) / 0.55)));
+      let half = q.size / 2;
+      if (pop) {
+        if (p <= 0) return;
+        half *= Math.max(0, ease.outBack(p, 2.2)) * gs;
+        c.globalAlpha = clamp(p * 6);
+        c.fillStyle = mixColor('#fffbea', s.glyphColor, ease.outCubic(clamp((p - 0.15) / 0.55)));
+      } else {
+        const e = fillEase(p);
+        if (ghost <= 0 && e <= 0) return;
+        c.globalAlpha = lerp(ghost, 1, e);
+        c.fillStyle = mixColor(s.glyphGhost, s.glyphColor, e);
+      }
       const x = gcx + (q.cx - gcx) * gs;
       const y = gcy + (q.cy - gcy) * gs;
       c.fillRect(x - half, y - half, half * 2, half * 2);

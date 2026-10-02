@@ -16,6 +16,23 @@ export const ease = {
   outBack: (t, s = 1.70158) => 1 + (s + 1) * (t - 1) ** 3 + s * (t - 1) ** 2,
 };
 
+// CSS-style cubic-bezier(x1, y1, x2, y2) timing function.
+export function cubicBezier(x1, y1, x2, y2) {
+  const at = (t, a, b) => ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 24; i++) {
+      const v = at(t, x1, x2);
+      if (Math.abs(v - x) < 1e-5) break;
+      if (v < x) lo = t; else hi = t;
+      t = (lo + hi) / 2;
+    }
+    return at(t, y1, y2);
+  };
+}
+
 const rgbCache = new Map();
 export function hexToRgb(hex) {
   let rgb = rgbCache.get(hex);

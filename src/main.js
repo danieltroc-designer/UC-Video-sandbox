@@ -5,6 +5,21 @@ import { buildSidebar } from './controls.js';
 import { exportVideo } from './export.js';
 
 const STORE_KEY = 'uc-title-studio:v1';
+const STORE_VERSION = 2; // v2+: only values that differ from the defaults are saved
+// Defaults that have changed since v1, which saved every value.
+const LEGACY_DEFAULTS = {
+  title: 'The complete file\nhandling platform',
+  showSubtitle: true,
+  glyphPattern: 'spin',
+  bgBrightness: 1,
+  bgZoom: 6,
+  bgDrift: 1,
+  shimmer: 0.55,
+  shimmerSpeed: 1,
+  shimmerAngle: -18,
+  spotlight: 0.5,
+  vignette: 0.55,
+};
 const PREVIEW_MAX = 1920; // preview renders at most this many px on the long edge
 
 const $ = (sel) => document.querySelector(sel);
@@ -18,9 +33,19 @@ let playing = true, looping = true, dirty = true, scrubbing = false;
 let exportAbort = null;
 
 function readStore() {
+  // Choice controls only accept their listed options, so values saved by an
+  // older version (e.g. a removed animation) fall back to the default.
+  const CHOICES = Object.fromEntries(SECTIONS.flatMap((sec) => sec.controls)
+    .filter((c) => c.options).map((c) => [c.key, c.options.map(([v]) => v)]));
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
-    return Object.fromEntries(Object.entries(saved).filter(([k]) => k in DEFAULTS));
+    if (saved.v !== STORE_VERSION) {
+      // Old saves held the whole state: values equal to the defaults of the time
+      // were never customised, so let the current defaults through instead.
+      for (const [k, v] of Object.entries(LEGACY_DEFAULTS)) if (saved[k] === v) delete saved[k];
+    }
+    return Object.fromEntries(Object.entries(saved)
+      .filter(([k, v]) => k in DEFAULTS && (!CHOICES[k] || CHOICES[k].includes(v))));
   } catch { return {}; }
 }
 
@@ -28,7 +53,9 @@ let saveTimer;
 function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
+    // Only keep what differs from the defaults, so improved defaults reach existing users.
+    const changed = Object.fromEntries(Object.entries(state).filter(([k, v]) => v !== DEFAULTS[k]));
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: STORE_VERSION, ...changed })); } catch { /* storage unavailable */ }
   }, 250);
 }
 

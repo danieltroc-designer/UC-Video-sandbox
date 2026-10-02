@@ -135,7 +135,11 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onImag
   for (const sec of sections) {
     const summary = el('summary', {}, [el('span', { text: sec.title })]);
     summary.insertAdjacentHTML('beforeend', CHEVRON);
-    const body = el('div', { class: 'section-body' }, sec.controls.map((c) => builders[c.type](c)));
+    const body = el('div', { class: 'section-body' }, sec.controls.map((c) => {
+      const node = builders[c.type](c);
+      if (c.when) conditionals.push(() => { node.hidden = !c.when(state); });
+      return node;
+    }));
     const details = el('details', { class: 'section', open: true }, [summary, body]);
     if (sec.when) conditionals.push(() => { details.hidden = !sec.when(state); });
     root.append(details);

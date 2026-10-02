@@ -14,12 +14,12 @@ export const DEFAULTS = {
   fps: 60,
 
   // Content
-  title: 'The complete file\nhandling platform',
+  title: 'The infrastructure\nbehind every file',
   subtitle: 'Upload, process and deliver any file at scale.\nOne API. Global CDN. Zero infrastructure.',
   url: 'uploadcare.com',
   showLogo: true,
   showTitle: true,
-  showSubtitle: true,
+  showSubtitle: false,
   showUrl: true,
 
   // Typography (sizes are px at 1080p)
@@ -39,7 +39,9 @@ export const DEFAULTS = {
   // Logo
   logoIntro: 700,
   logoFinal: 290,
-  glyphPattern: 'spin',
+  glyphPattern: 'dissolve',
+  glyphStyle: 'fill',
+  glyphGhost: '#323233',
   glyphColor: '#ffcf3e',
   wordColor: '#ffffff',
   glow: 0.5,
@@ -58,16 +60,18 @@ export const DEFAULTS = {
   offsetY: 0,
 
   // Background
-  bgBrightness: 1,
-  bgZoom: 6,
-  bgDrift: 1,
+  bgBrightness: 0.7,
+  bgFlow: 1.55,
+  bgFlowSpeed: 0.25,
+  bgZoom: 25,
+  bgDrift: 0.85,
   bgFlip: false,
-  shimmer: 0.55,
-  shimmerSpeed: 1,
-  shimmerAngle: -18,
-  spotlight: 0.5,
+  shimmer: 0.1,
+  shimmerSpeed: 0.9,
+  shimmerAngle: 0,
+  spotlight: 0,
   spotColor: '#d9dcf0',
-  vignette: 0.55,
+  vignette: 0.39,
   grain: 0.07,
 };
 
@@ -102,8 +106,10 @@ export const SECTIONS = [
     title: 'Logo',
     when: (s) => s.showLogo,
     controls: [
-      { key: 'glyphPattern', type: 'select', label: 'Mark build',
-        options: [['spin', 'Spin'], ['radial', 'Radial'], ['diagonal', 'Diagonal'], ['rise', 'Rise'], ['random', 'Scatter']] },
+      { key: 'glyphPattern', type: 'select', label: 'Mark animation',
+        options: [['dissolve', 'Dissolve up'], ['ripple', 'Ripple'], ['sweep', 'Sweep across'], ['spin', 'Spin'], ['random', 'Scatter']] },
+      { key: 'glyphStyle', type: 'segmented', label: 'Square style', options: [['fill', 'Fill'], ['pop', 'Pop']] },
+      { key: 'glyphGhost', type: 'color', label: 'Empty square color', when: (s) => s.glyphStyle === 'fill' },
       { key: 'logoIntro', type: 'range', label: 'Intro width', min: 300, max: 1000, step: 10, unit: 'px' },
       { key: 'logoFinal', type: 'range', label: 'Final width', min: 140, max: 600, step: 5, unit: 'px' },
       { key: 'glow', type: 'range', label: 'Mark glow', min: 0, max: 1.5, step: 0.05 },
@@ -141,6 +147,8 @@ export const SECTIONS = [
     controls: [
       { key: 'bgImage', type: 'image', label: 'Image' },
       { key: 'bgBrightness', type: 'range', label: 'Brightness', min: 0.3, max: 2, step: 0.01 },
+      { key: 'bgFlow', type: 'range', label: 'Shape flow', min: 0, max: 3, step: 0.05, unit: '×' },
+      { key: 'bgFlowSpeed', type: 'range', label: 'Flow speed', min: 0.2, max: 3, step: 0.05, unit: '×' },
       { key: 'bgZoom', type: 'range', label: 'Camera push', min: 0, max: 25, step: 0.5, unit: '%' },
       { key: 'bgDrift', type: 'range', label: 'Camera drift', min: 0, max: 3, step: 0.05, unit: '×' },
       { key: 'bgFlip', type: 'switch', label: 'Mirror' },
