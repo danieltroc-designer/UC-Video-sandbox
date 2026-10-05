@@ -1,4 +1,4 @@
-import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS } from './settings.js';
+import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS, BACKGROUNDS, LOOK_KEYS } from './settings.js';
 import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
 import { buildSidebar } from './controls.js';
@@ -26,8 +26,18 @@ const $ = (sel) => document.querySelector(sel);
 const canvas = $('#stage');
 const ctx = canvas.getContext('2d', { alpha: false });
 
-const state = { ...DEFAULTS, ...readStore() };
-let renderer, logo, defaultBg, currentBg, sidebar;
+const lookOf = (id) => (BACKGROUNDS[id] ?? BACKGROUNDS[DEFAULTS.bgPreset]).look;
+const diff = (obj, base) => Object.fromEntries(Object.entries(obj).filter(([k, v]) => v !== base[k]));
+
+const saved = readStore();
+const state = { ...DEFAULTS, ...lookOf(saved.values.bgPreset), ...saved.values };
+// What sliders reset to and what counts as "changed": the defaults, with the
+// active background's own look.
+const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
+// Look tweaks parked for the backgrounds that aren't active right now.
+const bgMemory = saved.bgMemory;
+let activePreset = state.bgPreset;
+let renderer, logo, currentBg, customBg = null, sidebar;
 let time = 0, duration = 1, timeline = null;
 let playing = true, looping = true, dirty = true, scrubbing = false;
 let exportAbort = null;
@@ -44,9 +54,14 @@ function readStore() {
       // were never customised, so let the current defaults through instead.
       for (const [k, v] of Object.entries(LEGACY_DEFAULTS)) if (saved[k] === v) delete saved[k];
     }
-    return Object.fromEntries(Object.entries(saved)
+    const bgMemory = {};
+    for (const [id, look] of Object.entries(saved.bgMemory ?? {})) {
+      if (id in BACKGROUNDS && look) bgMemory[id] = Object.fromEntries(Object.entries(look).filter(([k]) => LOOK_KEYS.includes(k)));
+    }
+    const values = Object.fromEntries(Object.entries(saved)
       .filter(([k, v]) => k in DEFAULTS && (!CHOICES[k] || CHOICES[k].includes(v))));
-  } catch { return {}; }
+    return { values, bgMemory };
+  } catch { return { values: {}, bgMemory: {} }; }
 }
 
 let saveTimer;
@@ -54,8 +69,10 @@ function persist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     // Only keep what differs from the defaults, so improved defaults reach existing users.
-    const changed = Object.fromEntries(Object.entries(state).filter(([k, v]) => v !== DEFAULTS[k]));
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: STORE_VERSION, ...changed })); } catch { /* storage unavailable */ }
+    const memory = Object.fromEntries(Object.entries(bgMemory)
+      .map(([id, look]) => [id, diff(look, lookOf(id))]).filter(([, d]) => Object.keys(d).length));
+    const data = { v: STORE_VERSION, ...diff(state, defaults), ...(Object.keys(memory).length && { bgMemory: memory }) };
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
   }, 250);
 }
 
@@ -306,12 +323,13 @@ function bindTopbar() {
   });
   $('#reset').addEventListener('click', () => {
     Object.assign(state, DEFAULTS);
+    Object.assign(defaults, DEFAULTS);
+    for (const id of Object.keys(bgMemory)) delete bgMemory[id];
+    activePreset = state.bgPreset;
     $('#format').value = state.format;
     $('#fps').value = state.fps;
-    setBackground(null);
-    sidebar.sync();
+    setCustomBackground(null);
     persist();
-    prepare();
   });
 
   window.addEventListener('keydown', (e) => {
@@ -325,10 +343,45 @@ function bindTopbar() {
   });
 }
 
-async function setBackground(file) {
-  currentBg = file ? await loadImage(URL.createObjectURL(file)) : defaultBg;
+// ---------------------------------------------------------------- backgrounds
+
+const presetImages = new Map();
+function presetImage(id) {
+  if (!presetImages.has(id)) presetImages.set(id, loadImage(imageSrc(id)));
+  return presetImages.get(id);
+}
+const imageSrc = (id) => (BACKGROUNDS[id] ?? BACKGROUNDS[DEFAULTS.bgPreset]).src;
+
+async function applyBackground() {
+  currentBg = customBg?.img ?? await presetImage(state.bgPreset);
   renderer.setBackground(currentBg);
   prepare();
+}
+
+// Switch built-in image: park the current look and bring in the new image's
+// own look (or the tweaks made to it earlier). Also drops a custom image.
+function selectBackground(id) {
+  if (id !== activePreset) {
+    bgMemory[activePreset] = Object.fromEntries(LOOK_KEYS.map((k) => [k, state[k]]));
+    Object.assign(state, lookOf(id), bgMemory[id]);
+    Object.assign(defaults, lookOf(id));
+    delete bgMemory[id];
+    activePreset = id;
+  }
+  state.bgPreset = id;
+  return setCustomBackground(null);
+}
+
+async function setCustomBackground(file) {
+  if (customBg) URL.revokeObjectURL(customBg.url);
+  customBg = null;
+  if (file) {
+    const url = URL.createObjectURL(file);
+    customBg = { url, name: file.name, img: await loadImage(url) };
+  }
+  sidebar.sync();
+  persist();
+  await applyBackground();
 }
 
 async function waitForFonts() {
@@ -342,17 +395,21 @@ async function waitForFonts() {
 
 async function boot() {
   await waitForFonts();
-  [logo, defaultBg] = await Promise.all([loadLogo('assets/lockup-dark.svg'), loadImage('assets/background.webp')]);
-  currentBg = defaultBg;
+  [logo, currentBg] = await Promise.all([loadLogo('assets/lockup-dark.svg'), presetImage(state.bgPreset)]);
   renderer = createRenderer({ logo });
   renderer.setBackground(currentBg);
 
   sidebar = buildSidebar($('#controls'), {
     sections: SECTIONS,
     state,
-    defaults: DEFAULTS,
-    onChange: () => { persist(); prepare(); },
-    onImage: (file) => setBackground(file),
+    defaults,
+    onChange: (key) => {
+      if (key === 'bgPreset') return selectBackground(state.bgPreset);
+      persist();
+      prepare();
+    },
+    onImage: (file) => setCustomBackground(file),
+    imageNote: () => customBg && `Using ${customBg.name} with the ${BACKGROUNDS[state.bgPreset].label} look.`,
   });
   bindTopbar();
   bindTimeline();
@@ -365,6 +422,8 @@ async function boot() {
   setPlaying(true);
   document.body.classList.add('is-ready');
   requestAnimationFrame(frame);
+  // Warm up the other images so switching is instant.
+  Object.keys(BACKGROUNDS).forEach((id) => presetImage(id).catch(() => {}));
 
   // Handy for scripting from the console: __studio.seek(2.5), __studio.play(false)…
   window.__studio = {

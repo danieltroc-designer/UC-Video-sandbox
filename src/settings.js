@@ -59,21 +59,60 @@ export const DEFAULTS = {
   spacing: 1,
   offsetY: 0,
 
-  // Background
-  bgBrightness: 0.7,
-  bgFlow: 1.55,
-  bgFlowSpeed: 0.25,
-  bgZoom: 25,
-  bgDrift: 0.85,
-  bgFlip: false,
-  shimmer: 0.1,
-  shimmerSpeed: 0.9,
-  shimmerAngle: 0,
-  spotlight: 0,
-  spotColor: '#d9dcf0',
-  vignette: 0.39,
-  grain: 0.07,
+  // Background — the image's own look is spread in from BACKGROUNDS below.
+  bgPreset: 'silk',
+  revealStyle: 'soft',
+  revealCorner: 'bottom-left',
+  revealDuration: 1.7,
 };
+
+// Built-in background images, each with the look it was tuned for (the values
+// of the Background section). Switching image swaps its look in.
+export const BACKGROUNDS = {
+  streaks: {
+    label: 'Streaks',
+    src: 'assets/background.webp',
+    look: {
+      bgBrightness: 0.7,
+      bgFlow: 1.55,
+      bgFlowSpeed: 0.25,
+      bgZoom: 25,
+      bgDrift: 0.85,
+      bgFlip: false,
+      shimmer: 0.1,
+      shimmerSpeed: 0.9,
+      shimmerAngle: 0,
+      spotlight: 0,
+      spotColor: '#d9dcf0',
+      vignette: 0.39,
+      grain: 0.07,
+    },
+  },
+  silk: {
+    label: 'Silk',
+    src: 'assets/background-silk.webp',
+    look: {
+      bgBrightness: 0.85,
+      bgFlow: 1.2,
+      bgFlowSpeed: 0.3,
+      bgZoom: 12,
+      bgDrift: 0.7,
+      bgFlip: false,
+      shimmer: 0.16,
+      shimmerSpeed: 0.5,
+      shimmerAngle: 32,
+      spotlight: 0,
+      spotColor: '#d9dcf0',
+      vignette: 0.45,
+      grain: 0.04,
+    },
+  },
+};
+
+Object.assign(DEFAULTS, BACKGROUNDS[DEFAULTS.bgPreset].look);
+
+// Keys that belong to a background's look.
+export const LOOK_KEYS = Object.keys(BACKGROUNDS.streaks.look);
 
 // Sidebar schema. `toggle` puts an on/off switch in the field header.
 export const SECTIONS = [
@@ -145,7 +184,14 @@ export const SECTIONS = [
     id: 'background',
     title: 'Background',
     controls: [
-      { key: 'bgImage', type: 'image', label: 'Image' },
+      { key: 'bgPreset', type: 'segmented', label: 'Image',
+        options: Object.entries(BACKGROUNDS).map(([id, b]) => [id, b.label]) },
+      { key: 'bgImage', type: 'image', label: 'Your own image' },
+      { key: 'revealStyle', type: 'segmented', label: 'Reveal',
+        options: [['soft', 'Soft'], ['fade', 'Fade']] },
+      { key: 'revealCorner', type: 'select', label: 'Reveal from', when: (s) => s.revealStyle !== 'fade',
+        options: [['bottom-left', 'Bottom left'], ['top-left', 'Top left'], ['top-right', 'Top right'], ['bottom-right', 'Bottom right']] },
+      { key: 'revealDuration', type: 'range', label: 'Reveal duration', min: 0.4, max: 4, step: 0.05, unit: 's' },
       { key: 'bgBrightness', type: 'range', label: 'Brightness', min: 0.3, max: 2, step: 0.01 },
       { key: 'bgFlow', type: 'range', label: 'Shape flow', min: 0, max: 3, step: 0.05, unit: '×' },
       { key: 'bgFlowSpeed', type: 'range', label: 'Flow speed', min: 0.2, max: 3, step: 0.05, unit: '×' },

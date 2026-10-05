@@ -48,12 +48,15 @@ export function createRenderer({ logo }) {
   const grain = makeGrainTiles(4, 256);
   const measure = makeCanvas(8, 8).getContext('2d');
 
-  function layer(name) {
+  // An offscreen canvas the size of the frame, or `k` times it for soft
+  // things (masks, glows) where a cheap low-res blur looks the same.
+  function layer(name, k = 1) {
+    const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
     let c = layers.get(name);
-    if (!c) layers.set(name, (c = makeCanvas(W, H)));
-    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    if (!c) layers.set(name, (c = makeCanvas(w, h)));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
     const x = c.getContext('2d');
-    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.setTransform(k, 0, 0, k, 0, 0); // draw in frame coordinates
     x.globalAlpha = 1;
     x.globalCompositeOperation = 'source-over';
     x.filter = 'none';
@@ -255,7 +258,7 @@ export function createRenderer({ logo }) {
       return o;
     };
 
-    tl.bg = { start: 0, end: 1.1 * k };
+    seg('bg', 'Background', 0, s.revealDuration * k);
     const nWords = L.title.words.length;
     const nSub = L.sub.lines.length;
     const hasBody = nWords || nSub || L.url;
@@ -364,11 +367,11 @@ export function createRenderer({ logo }) {
     ctx.restore();
   }
 
-  function camera(t) {
+  function camera(t, settle = 0) {
     const p = ease.outQuad(clamp(t / Math.max(T.duration, 0.001)));
     const amp = s.bgFlow * 9 * u; // how far the streaks undulate, in px
     // Extra zoom gives the flow headroom so the frame edges never show.
-    const zoom = 1.02 + (2.2 * amp) / H + (s.bgZoom / 100) * p;
+    const zoom = (1.02 + (2.2 * amp) / H + (s.bgZoom / 100) * p) * (1 + 0.07 * settle);
     const roomX = ((zoom - 1) * W) / 2;
     const roomY = ((zoom - 1) * H) / 2 - amp * zoom;
     const px = clamp((p - 0.5) * s.bgDrift * 0.02 * W, -roomX, roomX);
@@ -398,10 +401,53 @@ export function createRenderer({ logo }) {
     c.restore();
   }
 
+  const CORNERS = { 'bottom-left': [0, 1], 'top-left': [0, 0], 'top-right': [1, 0], 'bottom-right': [1, 1] };
+
+  // How far the background is uncovered (0–1). Soft grows out of a corner and
+  // shrinks back into it for the outro; fade just changes opacity.
+  function reveal(t, fadeOut) {
+    const p = progress(t, T.bg.start, T.bg.end);
+    if (s.revealStyle === 'fade') return { open: 1, alpha: ease.outCubic(p) * (1 - fadeOut) };
+    return { open: ease.outCubic(p) * (1 - fadeOut), alpha: 1 };
+  }
+
   function drawBackground(ctx, t, fadeOut) {
-    const a = ease.outCubic(progress(t, T.bg.start, T.bg.end)) * (1 - fadeOut);
-    if (a <= 0) return;
-    const cam = camera(t);
+    const { open, alpha } = reveal(t, fadeOut);
+    if (open <= 0 || alpha <= 0) return;
+    const masked = open < 1;
+    const cam = camera(t, masked ? 1 - open : 0);
+    if (!masked) {
+      paintBackground(ctx, t, cam, alpha);
+      return;
+    }
+    const [lc, c] = layer('bg');
+    paintBackground(c, t, cam, 1);
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(revealMask(open), 0, 0, W, H);
+    ctx.drawImage(lc, 0, 0);
+  }
+
+  // A very wide, smoothly feathered radial from the corner (like the card
+  // hover), so the reveal reads as light spreading rather than a visible edge.
+  function revealMask(open) {
+    const [mc, m] = layer('mask', 0.25);
+    m.clearRect(0, 0, W, H);
+    const [fx, fy] = CORNERS[s.revealCorner] ?? CORNERS['bottom-left'];
+    const diag = Math.hypot(W, H);
+    const feather = diag * 1.1;
+    const r = Math.max(1, open * (diag + feather));
+    const inner = clamp((r - feather) / r);
+    const g = m.createRadialGradient(fx * W, fy * H, 0, fx * W, fy * H, r);
+    for (let i = 0; i <= 8; i++) {
+      const x = i / 8;
+      g.addColorStop(inner + (1 - inner) * x, `rgba(0,0,0,${1 - x * x * (3 - 2 * x)})`); // smoothstep falloff
+    }
+    m.fillStyle = g;
+    m.fillRect(0, 0, W, H);
+    return mc;
+  }
+
+  function paintBackground(ctx, t, cam, a) {
     ctx.globalAlpha = a;
     drawCam(ctx, bgBase, cam);
 

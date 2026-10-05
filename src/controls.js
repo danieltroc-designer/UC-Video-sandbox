@@ -20,7 +20,7 @@ function formatValue(c, v) {
   return `${Number(v).toFixed(decimals)}${c.unit ?? ''}`;
 }
 
-export function buildSidebar(root, { sections, state, defaults, onChange, onImage }) {
+export function buildSidebar(root, { sections, state, defaults, onChange, onImage, imageNote }) {
   const syncers = [];
   const conditionals = [];
 
@@ -121,13 +121,18 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onImag
         type: 'file', accept: 'image/*', hidden: true,
         onchange: (e) => { const f = e.target.files?.[0]; if (f) onImage(f); e.target.value = ''; },
       });
-      return el('div', { class: 'field row' }, [
-        el('span', { class: 'field-label', text: c.label }),
-        el('div', { class: 'btn-row' }, [
-          el('button', { class: 'btn small', type: 'button', text: 'Replace…', onclick: () => file.click() }),
-          el('button', { class: 'btn small ghost', type: 'button', text: 'Default', onclick: () => onImage(null) }),
-          file,
-        ]),
+      const upload = el('button', { class: 'btn small', type: 'button', onclick: () => file.click() });
+      const remove = el('button', { class: 'btn small ghost', type: 'button', text: 'Remove', onclick: () => onImage(null) });
+      const note = el('p', { class: 'hint' });
+      syncers.push(() => {
+        const text = imageNote?.();
+        note.textContent = text || '';
+        note.hidden = remove.hidden = !text;
+        upload.textContent = text ? 'Replace…' : 'Upload…';
+      });
+      return el('div', { class: 'field' }, [
+        head(c, el('div', { class: 'btn-row' }, [remove, upload, file])),
+        note,
       ]);
     },
   };
