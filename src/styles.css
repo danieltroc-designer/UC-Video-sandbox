@@ -45,6 +45,7 @@ button { cursor: pointer; }
 /* ------------------------------------------------------------------ topbar */
 
 .topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -58,6 +59,14 @@ button { cursor: pointer; }
 .brand-name { font-weight: 600; letter-spacing: -0.01em; }
 
 .top-actions { display: flex; align-items: center; gap: 8px; }
+
+.mode-switch {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+}
+.mode-switch button { height: 28px; font-size: 12.5px; font-weight: 600; }
 
 /* ------------------------------------------------------------------ buttons */
 
@@ -530,4 +539,5 @@ a.btn { text-decoration: none; }
   .sidebar { border-left: 0; border-top: 1px solid var(--line); }
   .transport { grid-template-columns: auto auto 1fr; padding: 8px 16px 14px; }
   #loop, #mute { display: none; }
+  .mode-switch { position: static; transform: none; width: 150px; }
 }

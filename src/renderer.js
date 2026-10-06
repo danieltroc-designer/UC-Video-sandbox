@@ -139,11 +139,14 @@ export function createRenderer({ logo }) {
   function computeLayout() {
     const m = measure;
     const maxW = W * 0.86;
-    const out = { logo: null, title: { words: [], lines: [] }, sub: { lines: [] }, url: null };
+    const outro = s.mode === 'outro';
+    const out = { logo: null, title: { words: [], lines: [] }, sub: { lines: [] }, url: null, buttons: null };
 
-    // Title — shrinks to fit (down to 70%) before it starts wrapping.
-    if (s.showTitle && s.title.trim()) {
-      const parsed = splitAccent(s.title);
+    // Title (intro) or tagline (outro, same typography) — shrinks to fit
+    // (down to 70%) before it starts wrapping.
+    const titleText = outro ? s.outroTagline : s.title;
+    if ((outro ? s.showTagline : s.showTitle) && titleText.trim()) {
+      const parsed = splitAccent(titleText);
       const fontAt = (size) => {
         m.font = `600 ${size}px Inter`;
         m.letterSpacing = `${(s.titleTracking / 100) * size}px`;
@@ -162,11 +165,12 @@ export function createRenderer({ logo }) {
         font: m.font,
         tracking: m.letterSpacing,
         lineH: size * s.titleLeading,
+        colors: [s.titleTop, s.titleBottom],
         lines, words: lines.flat(),
       };
     }
 
-    if (s.showSubtitle && s.subtitle.trim()) {
+    if (!outro && s.showSubtitle && s.subtitle.trim()) {
       const size = s.subtitleSize * u;
       m.font = `${s.subtitleWeight} ${size}px Inter`;
       m.letterSpacing = '0px';
@@ -180,42 +184,71 @@ export function createRenderer({ logo }) {
       out.sub = { size, font: m.font, lineH: size * 1.45, lines };
     }
 
+    // Outro buttons, after the design system: pills with uppercase Commit Mono
+    // (13px, +0.025em, 24px padding, 12px gap at 1×), equal widths.
+    if (outro) {
+      const labels = [
+        s.showPrimary && s.primaryLabel.trim() && { label: s.primaryLabel.trim().toUpperCase(), primary: true },
+        s.showSecondary && s.secondaryLabel.trim() && { label: s.secondaryLabel.trim().toUpperCase(), primary: false },
+      ].filter(Boolean);
+      if (labels.length) {
+        const k = s.buttonScale * u;
+        const fs = 13 * k;
+        m.font = `400 ${fs}px "Commit Mono", ui-monospace, monospace`;
+        m.letterSpacing = `${0.025 * fs}px`;
+        const pad = 24 * k, h = 40 * k, gap = 12 * k;
+        const items = labels.map((b) => ({ ...b, tw: m.measureText(b.label).width - 0.025 * fs }));
+        const bw = Math.max(174 * k, ...items.map((b) => b.tw + pad * 2));
+        const total = bw * items.length + gap * (items.length - 1);
+        items.forEach((b, i) => { b.w = bw; b.x = W / 2 - total / 2 + i * (bw + gap); });
+        const capH = m.measureText('H').actualBoundingBoxAscent;
+        out.buttons = { font: m.font, tracking: m.letterSpacing, h, capH, items };
+      }
+    }
+
     if (s.showUrl && s.url.trim()) {
       const size = s.urlSize * u;
       m.font = `500 ${size}px Inter`;
       m.letterSpacing = `${0.01 * size}px`;
       const text = s.url.trim();
       const tw = m.measureText(text).width;
-      const pill = s.urlStyle === 'pill';
+      const pill = !outro && s.urlStyle === 'pill';
       const h = pill ? size * 2.25 : size * 1.3;
       const dot = pill ? size * 0.34 : 0;
       const gap = pill ? size * 0.55 : 0;
       const padX = pill ? size * 0.95 : 0;
-      out.url = { size, font: m.font, tracking: m.letterSpacing, text, tw, h, dot, gap, padX, pill, w: padX * 2 + dot + gap + tw };
+      const color = outro ? s.outroUrlColor : s.urlColor;
+      out.url = { size, font: m.font, tracking: m.letterSpacing, text, tw, h, dot, gap, padX, pill, color, w: padX * 2 + dot + gap + tw };
     }
 
-    const hasBody = out.title.lines.length || out.sub.lines.length || out.url;
+    const hasBody = out.title.lines.length || out.sub.lines.length || out.url || out.buttons;
 
-    // Vertical stack: [lockup] [title] [subtitle] [url], centred as one block.
+    // Vertical stack, centred as one block. The lockup starts big in the middle
+    // and moves up into place (always shown in the outro).
     const blocks = [];
-    if (s.showLogo) {
-      const s0 = (s.logoIntro * u) / logo.bounds.w;
-      const s1 = hasBody ? (s.logoFinal * u) / logo.bounds.w : s0;
-      out.logo = { s0, s1, x0: W / 2, y0: H / 2, x1: W / 2, y1: H / 2 };
+    if (outro || s.showLogo) {
+      const sIn = (s.logoIntro * u) / logo.bounds.w;
+      const s1 = hasBody ? (s.logoFinal * u) / logo.bounds.w : sIn;
+      out.logo = { s0: sIn, s1, x0: W / 2, y0: H / 2, x1: W / 2, y1: H / 2 };
       if (hasBody) blocks.push({ kind: 'logo', h: logo.bounds.h * s1 });
     }
     if (out.title.lines.length) blocks.push({ kind: 'title', h: out.title.lines.length * out.title.lineH });
     if (out.sub.lines.length) blocks.push({ kind: 'sub', h: out.sub.lines.length * out.sub.lineH });
+    if (out.buttons) blocks.push({ kind: 'buttons', h: out.buttons.h });
     if (out.url) blocks.push({ kind: 'url', h: out.url.h });
 
-    const GAPS = { 'logo>title': 62, 'logo>sub': 48, 'logo>url': 48, 'title>sub': 40, 'title>url': 64, 'sub>url': 46 };
+    const GAPS = outro
+      ? { 'logo>title': 62, 'logo>buttons': 96, 'logo>url': 64, 'title>buttons': 88, 'title>url': 72, 'buttons>url': 70 }
+      : { 'logo>title': 62, 'logo>sub': 48, 'logo>url': 48, 'title>sub': 40, 'title>url': 64, 'sub>url': 46 };
     const gap = (a, b) => (GAPS[`${a}>${b}`] ?? 40) * u * s.spacing;
     const total = blocks.reduce((acc, b, i) => acc + b.h + (i ? gap(blocks[i - 1].kind, b.kind) : 0), 0);
     let y = H / 2 - total / 2 + s.offsetY * u;
 
     blocks.forEach((b, i) => {
       if (i) y += gap(blocks[i - 1].kind, b.kind);
-      if (b.kind === 'logo') out.logo.y1 = y + b.h / 2;
+      if (b.kind === 'logo') {
+        out.logo.y1 = y + b.h / 2;
+      }
       if (b.kind === 'title') {
         const ti = out.title;
         ti.top = y;
@@ -235,6 +268,7 @@ export function createRenderer({ logo }) {
           ln.baseline = y + li * sb.lineH + (sb.lineH + CAP * sb.size) / 2;
         });
       }
+      if (b.kind === 'buttons') out.buttons.y = y;
       if (b.kind === 'url') {
         const ul = out.url;
         ul.x = W / 2 - ul.w / 2;
@@ -252,9 +286,10 @@ export function createRenderer({ logo }) {
   // for k so the whole piece lands exactly on the chosen length.
   function computeTimeline() {
     if (!s.fitLength) return buildTimeline(1 / s.speed, s.hold);
-    const hold = Math.max(0.3, s.length * 0.2);
+    const length = s.mode === 'outro' ? s.outroLength : s.length;
+    const hold = Math.max(0.3, length * (endFade() ? 0.2 : 0.3));
     const natural = buildTimeline(1, 0).duration;
-    return buildTimeline(Math.max(0.05, (s.length - hold) / natural), hold);
+    return buildTimeline(Math.max(0.05, (length - hold) / natural), hold);
   }
 
   function buildTimeline(k, holdFor) {
@@ -267,10 +302,12 @@ export function createRenderer({ logo }) {
       return o;
     };
 
-    seg('bg', 'Background', 0, s.revealDuration * k);
+    if (blackBackground()) tl.bg = { start: 0, end: 0 };
+    else seg('bg', 'Background', 0, s.revealDuration * k);
     const nWords = L.title.words.length;
     const nSub = L.sub.lines.length;
-    const hasBody = nWords || nSub || L.url;
+    const hasBody = nWords || nSub || L.url || L.buttons;
+    const outro = s.mode === 'outro';
     let next = 0.35 * k;
     let end = tl.bg.end;
 
@@ -298,7 +335,7 @@ export function createRenderer({ logo }) {
     }
 
     if (nWords) {
-      const t = seg('title', 'Title', next);
+      const t = seg('title', outro ? 'Tagline' : 'Title', next);
       t.stagger = 0.085 * k * st;
       t.dur = 0.9 * k;
       t.end = t.start + t.stagger * (nWords - 1) + t.dur;
@@ -315,6 +352,15 @@ export function createRenderer({ logo }) {
       end = Math.max(end, sb.end);
     }
 
+    if (L.buttons) {
+      const b = seg('buttons', 'Buttons', next);
+      b.stagger = 0.1 * k * st;
+      b.dur = 0.8 * k;
+      b.end = b.start + b.stagger * (L.buttons.items.length - 1) + b.dur;
+      next = b.start + 0.35 * k;
+      end = Math.max(end, b.end);
+    }
+
     if (L.url) {
       const ur = seg('url', 'URL', next, next + 0.85 * k);
       end = Math.max(end, ur.end);
@@ -322,7 +368,7 @@ export function createRenderer({ logo }) {
 
     const hold = seg('hold', 'Hold', end, end + holdFor);
     tl.duration = hold.end;
-    if (s.outro) tl.duration = seg('outro', 'Outro', hold.end, hold.end + 1.0 * k).end;
+    if (endFade()) tl.duration = seg('outro', 'Fade out', hold.end, hold.end + 1.0 * k).end;
     return tl;
   }
 
@@ -367,10 +413,11 @@ export function createRenderer({ logo }) {
     const out = ease.inOutCubic(clamp(o / 0.7));
     const fx = { alpha: 1 - out, blur: out * 22 * u, lift: -out * 18 * u };
 
-    drawBackground(ctx, t, ease.inOutCubic(clamp((o - 0.25) / 0.75)));
+    if (!blackBackground()) drawBackground(ctx, t, ease.inOutCubic(clamp((o - 0.25) / 0.75)));
     if (L.logo) drawLockup(ctx, t, fx);
     if (T.title) drawTitle(ctx, t, fx);
     if (T.sub) drawSubtitle(ctx, t, fx);
+    if (T.buttons) drawButtons(ctx, t, fx);
     if (T.url) drawUrl(ctx, t, fx);
     drawGrain(ctx, t);
     ctx.restore();
@@ -409,6 +456,10 @@ export function createRenderer({ logo }) {
     }
     c.restore();
   }
+
+  const blackBackground = () => s.mode === 'outro' && s.outroBackground === 'black';
+  // The intro fades out at the end; the outro holds its final frame by default.
+  const endFade = () => (s.mode === 'outro' ? s.outroEndFade : s.outro);
 
   const CORNERS = { 'bottom-left': [0, 1], 'top-left': [0, 0], 'top-right': [1, 0], 'bottom-right': [1, 1] };
 
@@ -606,8 +657,8 @@ export function createRenderer({ logo }) {
   function drawTitle(ctx, t, fx) {
     const ti = L.title, TT = T.title;
     const grad = ctx.createLinearGradient(0, ti.top, 0, ti.bottom);
-    grad.addColorStop(0, s.titleTop);
-    grad.addColorStop(1, s.titleBottom);
+    grad.addColorStop(0, ti.colors[0]);
+    grad.addColorStop(1, ti.colors[1]);
     const accent = ctx.createLinearGradient(0, ti.top, 0, ti.bottom);
     accent.addColorStop(0, mixColor(s.accent, '#ffffff', 0.35));
     accent.addColorStop(1, s.accent);
@@ -707,7 +758,7 @@ export function createRenderer({ logo }) {
       textX = dotX + ul.dot + ul.gap;
       ctx.font = ul.font;
       ctx.letterSpacing = ul.tracking;
-      ctx.fillStyle = s.urlColor;
+      ctx.fillStyle = ul.color;
       ctx.globalAlpha = ease.outCubic(clamp((p - 0.18) * 2)) * fx.alpha;
       ctx.fillText(ul.text, textX, ul.baseline);
       ctx.restore();
@@ -715,10 +766,57 @@ export function createRenderer({ logo }) {
       ctx.globalAlpha = ease.outCubic(clamp(p * 1.6)) * fx.alpha;
       ctx.font = ul.font;
       ctx.letterSpacing = ul.tracking;
-      ctx.fillStyle = s.urlColor;
+      ctx.fillStyle = ul.color;
       ctx.fillText(ul.text, textX, ul.baseline);
     }
     ctx.restore();
+  }
+
+  // Outro buttons rise in out of focus, one after the other; once the primary
+  // lands, a soft light glides across it.
+  function drawButtons(ctx, t, fx) {
+    const B = L.buttons, S = T.buttons;
+    B.items.forEach((b, i) => {
+      const a0 = S.start + i * S.stagger;
+      const p = progress(t, a0, a0 + S.dur);
+      if (p <= 0) return;
+      const e = ease.outExpo(p);
+      const blur = (1 - ease.outCubic(p)) * 12 * u * s.blur + fx.blur;
+      const sc = lerp(0.94, 1, e);
+      ctx.save();
+      ctx.globalAlpha = ease.outCubic(clamp(p * 1.8)) * fx.alpha;
+      if (blur > 0.3) ctx.filter = `blur(${blur.toFixed(2)}px)`;
+      ctx.translate(b.x + b.w / 2, B.y + B.h / 2 + (1 - e) * 28 * u * s.rise + fx.lift);
+      ctx.scale(sc, sc);
+      ctx.beginPath();
+      ctx.roundRect(-b.w / 2, -B.h / 2, b.w, B.h, B.h / 2);
+      ctx.fillStyle = b.primary ? s.primaryColor : s.secondaryColor;
+      ctx.fill();
+
+      if (b.primary) {
+        const sp = progress(t, a0 + S.dur * 0.55, a0 + S.dur * 0.55 + 1.1 * T.k);
+        if (sp > 0 && sp < 1) {
+          ctx.save();
+          ctx.clip();
+          const x = lerp(-b.w * 0.8, b.w * 0.8, ease.inOutCubic(sp));
+          const g = ctx.createLinearGradient(x - B.h * 1.2, 0, x + B.h * 1.2, 0);
+          g.addColorStop(0, 'rgba(255,255,255,0)');
+          g.addColorStop(0.5, `rgba(255,255,255,${0.22 * Math.sin(Math.PI * sp)})`);
+          g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(-b.w / 2, -B.h / 2, b.w, B.h);
+          ctx.restore();
+        }
+      }
+
+      ctx.font = B.font;
+      ctx.letterSpacing = B.tracking;
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = b.primary ? s.primaryText : s.secondaryText;
+      ctx.fillText(b.label, -b.tw / 2, B.capH / 2);
+      ctx.restore();
+    });
   }
 
   function drawGrain(ctx, t) {

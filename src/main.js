@@ -32,6 +32,7 @@ const diff = (obj, base) => Object.fromEntries(Object.entries(obj).filter(([k, v
 
 const saved = readStore();
 const state = { ...DEFAULTS, ...lookOf(saved.values.bgPreset), ...saved.values };
+if (!['intro', 'outro'].includes(state.mode)) state.mode = DEFAULTS.mode;
 // What sliders reset to and what counts as "changed": the defaults, with the
 // active background's own look.
 const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
@@ -220,9 +221,10 @@ function bindTimeline() {
 
 function exportFilename(ext) {
   const [w, h] = outputSize();
-  const slug = (state.showTitle ? state.title : 'intro')
-    .replace(/\*/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'intro';
-  return `uploadcare-${slug}-${w}x${h}.${ext}`;
+  const outro = state.mode === 'outro';
+  const text = outro ? (state.showTagline ? state.outroTagline : '') : (state.showTitle ? state.title : '');
+  const slug = text.replace(/\*/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || state.mode;
+  return `uploadcare-${outro ? 'outro-' : ''}${slug}-${w}x${h}.${ext}`;
 }
 
 // Object URLs live until they're replaced. Revoking on a timer made Safari save
@@ -311,7 +313,28 @@ function snapshot() {
 
 // --------------------------------------------------------------------- boot
 
+function syncMode() {
+  for (const b of document.querySelectorAll('#mode button')) {
+    const on = b.dataset.mode === state.mode;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+}
+
 function bindTopbar() {
+  syncMode();
+  for (const b of document.querySelectorAll('#mode button')) {
+    b.addEventListener('click', () => {
+      if (state.mode === b.dataset.mode) return;
+      state.mode = b.dataset.mode;
+      syncMode();
+      sidebar.sync();
+      persist();
+      prepare();
+      seek(0);
+    });
+  }
+
   const format = $('#format');
   format.replaceChildren(...Object.entries(FORMATS).map(([value, f]) => new Option(f.label, value)));
   format.value = state.format;
@@ -349,6 +372,7 @@ function bindTopbar() {
     activePreset = state.bgPreset;
     $('#format').value = state.format;
     $('#fps').value = state.fps;
+    syncMode();
     setCustomBackground(null);
     setCustomAudio(null);
     persist();
@@ -447,7 +471,9 @@ async function waitForFonts() {
   const timeout = (ms) => new Promise((r) => setTimeout(r, ms));
   // Offline the stylesheet never loads — fall back to system fonts after a moment.
   if (!link.sheet) await Promise.race([new Promise((r) => { link.onload = r; link.onerror = r; }), timeout(3000)]);
-  const faces = ['600 100px Inter', '500 32px Inter', '400 32px Inter'].map((f) => document.fonts.load(f));
+  const mono = $('#monoCss');
+  if (!mono.sheet) await Promise.race([new Promise((r) => { mono.onload = r; mono.onerror = r; }), timeout(3000)]);
+  const faces = ['600 100px Inter', '500 32px Inter', '400 32px Inter', '400 26px "Commit Mono"'].map((f) => document.fonts.load(f));
   await Promise.race([Promise.all(faces).catch(() => {}), timeout(4000)]);
 }
 

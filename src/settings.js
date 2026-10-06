@@ -13,6 +13,9 @@ export const DEFAULTS = {
   format: '1920x1080',
   fps: 60,
 
+  // Intro or outro composition (switched in the top bar)
+  mode: 'intro',
+
   // Content
   title: 'The infrastructure\nbehind every file',
   subtitle: 'Upload, process and deliver any file at scale.\nOne API. Global CDN. Zero infrastructure.',
@@ -21,6 +24,21 @@ export const DEFAULTS = {
   showTitle: true,
   showSubtitle: false,
   showUrl: true,
+  outroTagline: 'The infrastructure\nbehind every file',
+  showTagline: true,
+  primaryLabel: 'Start free',
+  showPrimary: true,
+  secondaryLabel: 'Get a demo',
+  showSecondary: true,
+
+  // Outro style — buttons follow the 2026 design system
+  outroBackground: 'black',
+  buttonScale: 1.75,
+  primaryColor: '#002fff',
+  primaryText: '#ffffff',
+  secondaryColor: '#232323',
+  secondaryText: '#ffffff',
+  outroUrlColor: '#8a8a96',
 
   // Typography (sizes are px at 1080p)
   titleSize: 116,
@@ -49,6 +67,8 @@ export const DEFAULTS = {
   // Motion
   fitLength: true,
   length: 4,
+  outroLength: 5,
+  outroEndFade: false,
   speed: 1,
   stagger: 1,
   blur: 1,
@@ -131,11 +151,15 @@ export const SECTIONS = [
     id: 'content',
     title: 'Content',
     controls: [
-      { key: 'title', type: 'textarea', label: 'Title', toggle: 'showTitle', rows: 2,
+      { key: 'title', type: 'textarea', label: 'Title', toggle: 'showTitle', rows: 2, when: (s) => s.mode === 'intro',
         hint: 'Line breaks are kept. Wrap words in *asterisks* to highlight them.' },
-      { key: 'subtitle', type: 'textarea', label: 'Subtitle', toggle: 'showSubtitle', rows: 3 },
+      { key: 'subtitle', type: 'textarea', label: 'Subtitle', toggle: 'showSubtitle', rows: 3, when: (s) => s.mode === 'intro' },
+      { key: 'outroTagline', type: 'textarea', label: 'Tagline', toggle: 'showTagline', rows: 2, when: (s) => s.mode === 'outro',
+        hint: 'Uses the title typography. Line breaks are kept.' },
+      { key: 'primaryLabel', type: 'text', label: 'Primary button', toggle: 'showPrimary', when: (s) => s.mode === 'outro' },
+      { key: 'secondaryLabel', type: 'text', label: 'Secondary button', toggle: 'showSecondary', when: (s) => s.mode === 'outro' },
       { key: 'url', type: 'text', label: 'URL', toggle: 'showUrl' },
-      { key: 'showLogo', type: 'switch', label: 'Logo intro' },
+      { key: 'showLogo', type: 'switch', label: 'Logo intro', when: (s) => s.mode === 'intro' },
     ],
   },
   {
@@ -143,15 +167,18 @@ export const SECTIONS = [
     title: 'Motion',
     controls: [
       { key: 'fitLength', type: 'switch', label: 'Fixed length' },
-      { key: 'length', type: 'range', label: 'Length', min: 3, max: 15, step: 0.5, unit: 's', when: (s) => s.fitLength,
-        hint: 'Everything is paced to end exactly on this length, with a short hold before the outro.' },
+      { key: 'length', type: 'range', label: 'Length', min: 3, max: 15, step: 0.5, unit: 's', when: (s) => s.fitLength && s.mode === 'intro',
+        hint: 'Everything is paced to end exactly on this length, with a short hold before the fade.' },
+      { key: 'outroLength', type: 'range', label: 'Length', min: 3, max: 15, step: 0.5, unit: 's', when: (s) => s.fitLength && s.mode === 'outro',
+        hint: 'Everything is paced to end exactly on this length; the last part holds the final frame.' },
       { key: 'speed', type: 'range', label: 'Speed', min: 0.5, max: 2, step: 0.05, unit: '×', when: (s) => !s.fitLength },
       { key: 'stagger', type: 'range', label: 'Stagger', min: 0.2, max: 2.5, step: 0.05, unit: '×' },
       { key: 'blur', type: 'range', label: 'Focus blur', min: 0, max: 2.5, step: 0.05, unit: '×' },
       { key: 'motionBlur', type: 'range', label: 'Motion blur', min: 0, max: 2.5, step: 0.05, unit: '×' },
       { key: 'rise', type: 'range', label: 'Rise distance', min: 0, max: 2.5, step: 0.05, unit: '×' },
       { key: 'hold', type: 'range', label: 'Hold', min: 0, max: 8, step: 0.1, unit: 's', when: (s) => !s.fitLength },
-      { key: 'outro', type: 'switch', label: 'Fade-out outro' },
+      { key: 'outro', type: 'switch', label: 'Fade out at end', when: (s) => s.mode === 'intro' },
+      { key: 'outroEndFade', type: 'switch', label: 'Fade out at end', when: (s) => s.mode === 'outro' },
     ],
   },
   {
@@ -166,9 +193,22 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'outro',
+    title: 'Outro style',
+    when: (s) => s.mode === 'outro',
+    controls: [
+      { key: 'outroBackground', type: 'segmented', label: 'Background', options: [['black', 'Black'], ['image', 'Image']] },
+      { key: 'buttonScale', type: 'range', label: 'Button size', min: 1, max: 3.5, step: 0.05, unit: '×',
+        hint: 'Buttons follow the 2026 design system: pill, Commit Mono, 40px tall at 1×.' },
+      { key: 'primaryColor', type: 'color', label: 'Primary button', pair: 'primaryText' },
+      { key: 'secondaryColor', type: 'color', label: 'Secondary button', pair: 'secondaryText' },
+      { key: 'outroUrlColor', type: 'color', label: 'URL color' },
+    ],
+  },
+  {
     id: 'logo',
     title: 'Logo',
-    when: (s) => s.showLogo,
+    when: (s) => s.mode === 'outro' || s.showLogo,
     controls: [
       { key: 'glyphPattern', type: 'select', label: 'Mark animation',
         options: [['dissolve', 'Dissolve up'], ['ripple', 'Ripple'], ['sweep', 'Sweep across'], ['spin', 'Spin'], ['random', 'Scatter']] },
@@ -190,11 +230,12 @@ export const SECTIONS = [
       { key: 'titleLeading', type: 'range', label: 'Title line height', min: 0.85, max: 1.4, step: 0.01 },
       { key: 'titleTop', type: 'color', label: 'Title gradient', pair: 'titleBottom' },
       { key: 'accent', type: 'color', label: 'Highlight' },
-      { key: 'subtitleSize', type: 'range', label: 'Subtitle size', min: 18, max: 64, step: 1, unit: 'px' },
-      { key: 'subtitleWeight', type: 'segmented', label: 'Subtitle weight', options: [[400, 'Regular'], [500, 'Medium'], [600, 'Semibold']] },
-      { key: 'subtitleColor', type: 'color', label: 'Subtitle color' },
+      { key: 'subtitleSize', type: 'range', label: 'Subtitle size', min: 18, max: 64, step: 1, unit: 'px', when: (s) => s.mode === 'intro' },
+      { key: 'subtitleWeight', type: 'segmented', label: 'Subtitle weight', when: (s) => s.mode === 'intro',
+        options: [[400, 'Regular'], [500, 'Medium'], [600, 'Semibold']] },
+      { key: 'subtitleColor', type: 'color', label: 'Subtitle color', when: (s) => s.mode === 'intro' },
       { key: 'urlSize', type: 'range', label: 'URL size', min: 14, max: 48, step: 1, unit: 'px' },
-      { key: 'urlStyle', type: 'segmented', label: 'URL style', options: [['pill', 'Pill'], ['plain', 'Plain']] },
+      { key: 'urlStyle', type: 'segmented', label: 'URL style', options: [['pill', 'Pill'], ['plain', 'Plain']], when: (s) => s.mode === 'intro' },
     ],
   },
   {
@@ -208,6 +249,7 @@ export const SECTIONS = [
   {
     id: 'background',
     title: 'Background',
+    when: (s) => !(s.mode === 'outro' && s.outroBackground === 'black'),
     controls: [
       { key: 'bgPreset', type: 'segmented', label: 'Image',
         options: Object.entries(BACKGROUNDS).map(([id, b]) => [id, b.label]) },
