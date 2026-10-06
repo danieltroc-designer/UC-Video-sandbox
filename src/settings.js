@@ -47,6 +47,8 @@ export const DEFAULTS = {
   glow: 0.5,
 
   // Motion
+  fitLength: true,
+  length: 4,
   speed: 1,
   stagger: 1,
   blur: 1,
@@ -54,6 +56,10 @@ export const DEFAULTS = {
   rise: 1,
   hold: 2,
   outro: true,
+
+  // Music
+  musicTrack: 'none',
+  musicVolume: 1,
 
   // Layout
   spacing: 1,
@@ -111,6 +117,11 @@ export const BACKGROUNDS = {
 
 Object.assign(DEFAULTS, BACKGROUNDS[DEFAULTS.bgPreset].look);
 
+// Built-in soundtracks (files in assets/music).
+export const TRACKS = {
+  none: { label: 'None' },
+};
+
 // Keys that belong to a background's look.
 export const LOOK_KEYS = Object.keys(BACKGROUNDS.streaks.look);
 
@@ -131,13 +142,27 @@ export const SECTIONS = [
     id: 'motion',
     title: 'Motion',
     controls: [
-      { key: 'speed', type: 'range', label: 'Speed', min: 0.5, max: 2, step: 0.05, unit: '×' },
+      { key: 'fitLength', type: 'switch', label: 'Fixed length' },
+      { key: 'length', type: 'range', label: 'Length', min: 3, max: 15, step: 0.5, unit: 's', when: (s) => s.fitLength,
+        hint: 'Everything is paced to end exactly on this length, with a short hold before the outro.' },
+      { key: 'speed', type: 'range', label: 'Speed', min: 0.5, max: 2, step: 0.05, unit: '×', when: (s) => !s.fitLength },
       { key: 'stagger', type: 'range', label: 'Stagger', min: 0.2, max: 2.5, step: 0.05, unit: '×' },
       { key: 'blur', type: 'range', label: 'Focus blur', min: 0, max: 2.5, step: 0.05, unit: '×' },
       { key: 'motionBlur', type: 'range', label: 'Motion blur', min: 0, max: 2.5, step: 0.05, unit: '×' },
       { key: 'rise', type: 'range', label: 'Rise distance', min: 0, max: 2.5, step: 0.05, unit: '×' },
-      { key: 'hold', type: 'range', label: 'Hold', min: 0, max: 8, step: 0.1, unit: 's' },
+      { key: 'hold', type: 'range', label: 'Hold', min: 0, max: 8, step: 0.1, unit: 's', when: (s) => !s.fitLength },
       { key: 'outro', type: 'switch', label: 'Fade-out outro' },
+    ],
+  },
+  {
+    id: 'music',
+    title: 'Music',
+    controls: [
+      { key: 'musicTrack', type: 'select', label: 'Track',
+        options: Object.entries(TRACKS).map(([id, tr]) => [id, tr.label]) },
+      { key: 'musicFile', type: 'upload', accept: 'audio/*', label: 'Your own audio' },
+      { key: 'musicVolume', type: 'range', label: 'Volume', min: 0, max: 1.5, step: 0.05, unit: '×',
+        hint: 'Plays with the preview and is mixed into the exported MP4, fading out at the end.' },
     ],
   },
   {
@@ -186,7 +211,7 @@ export const SECTIONS = [
     controls: [
       { key: 'bgPreset', type: 'segmented', label: 'Image',
         options: Object.entries(BACKGROUNDS).map(([id, b]) => [id, b.label]) },
-      { key: 'bgImage', type: 'image', label: 'Your own image' },
+      { key: 'bgImage', type: 'upload', accept: 'image/*', label: 'Your own image' },
       { key: 'revealStyle', type: 'segmented', label: 'Reveal',
         options: [['soft', 'Soft'], ['fade', 'Fade']] },
       { key: 'revealCorner', type: 'select', label: 'Reveal from', when: (s) => s.revealStyle !== 'fade',

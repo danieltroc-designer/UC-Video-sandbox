@@ -247,8 +247,17 @@ export function createRenderer({ logo }) {
     return out;
   }
 
+  // Fixed length: every animation time scales with the pace k and only the
+  // hold doesn't, so total = k · (natural length without hold) + hold — solve
+  // for k so the whole piece lands exactly on the chosen length.
   function computeTimeline() {
-    const k = 1 / s.speed;
+    if (!s.fitLength) return buildTimeline(1 / s.speed, s.hold);
+    const hold = Math.max(0.3, s.length * 0.2);
+    const natural = buildTimeline(1, 0).duration;
+    return buildTimeline(Math.max(0.05, (s.length - hold) / natural), hold);
+  }
+
+  function buildTimeline(k, holdFor) {
     const st = s.stagger;
     const tl = { segments: [], k };
     const seg = (id, label, start, end = start) => {
@@ -311,7 +320,7 @@ export function createRenderer({ logo }) {
       end = Math.max(end, ur.end);
     }
 
-    const hold = seg('hold', 'Hold', end, end + s.hold);
+    const hold = seg('hold', 'Hold', end, end + holdFor);
     tl.duration = hold.end;
     if (s.outro) tl.duration = seg('outro', 'Outro', hold.end, hold.end + 1.0 * k).end;
     return tl;

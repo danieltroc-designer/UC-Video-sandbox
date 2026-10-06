@@ -1,4 +1,5 @@
-import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS, BACKGROUNDS, LOOK_KEYS } from './settings.js';
+import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS, BACKGROUNDS, LOOK_KEYS, TRACKS } from './settings.js';
+import { createPlayer, loadAudio, decodeAudio } from './audio.js';
 import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
 import { buildSidebar } from './controls.js';
@@ -38,6 +39,8 @@ const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
 const bgMemory = saved.bgMemory;
 let activePreset = state.bgPreset;
 let renderer, logo, currentBg, customBg = null, sidebar;
+let audioBuffer = null, customAudio = null, audioError = '', muted = false;
+const player = createPlayer();
 let time = 0, duration = 1, timeline = null;
 let playing = true, looping = true, dirty = true, scrubbing = false;
 let exportAbort = null;
@@ -101,10 +104,12 @@ function prepare() {
     canvas.height = ph;
     fitStage();
   }
+  const before = duration;
   ({ duration, timeline } = renderer.prepare(state, pw, ph));
   time = Math.min(time, duration);
   drawTimeline();
   dirty = true;
+  if (Math.abs(before - duration) > 1e-3) syncAudio(); // the fade-out moved
 }
 
 function fitStage() {
@@ -122,7 +127,7 @@ function frame(now) {
   if (playing && !scrubbing) {
     time += dt;
     if (time >= duration) {
-      if (looping) time %= duration;
+      if (looping) { time %= duration; syncAudio(); }
       else { time = duration; setPlaying(false); }
     }
     dirty = true;
@@ -140,11 +145,19 @@ function setPlaying(v) {
   if (playing && time >= duration - 1e-3) time = 0;
   $('#play').classList.toggle('is-playing', playing);
   $('#play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  syncAudio();
 }
 
 function seek(t) {
   time = Math.max(0, Math.min(duration, t));
   dirty = true;
+  syncAudio();
+}
+
+// Music follows the playhead: playing from `time`, silent while paused or scrubbing.
+function syncAudio() {
+  if (playing && !scrubbing) player.play(time, duration);
+  else player.stop();
 }
 
 // ----------------------------------------------------------------- timeline
@@ -198,7 +211,7 @@ function bindTimeline() {
     seek(toTime(e));
   });
   tl.addEventListener('pointermove', (e) => scrubbing && seek(toTime(e)));
-  const end = () => { scrubbing = false; };
+  const end = () => { scrubbing = false; syncAudio(); };
   tl.addEventListener('pointerup', end);
   tl.addEventListener('pointercancel', end);
 }
@@ -252,6 +265,7 @@ async function runExport() {
   try {
     const { blob, method } = await exportVideo({
       settings: { ...state }, logo, background: currentBg, width: w, height: h, fps: state.fps,
+      audio: audioBuffer && { buffer: audioBuffer, volume: state.musicVolume },
       signal: exportAbort.signal,
       onProgress: (p) => { bar.style.width = `${p * 100}%`; pct.textContent = `${Math.round(p * 100)}%`; },
       onStatus: (msg) => { status.textContent = msg; },
@@ -316,6 +330,13 @@ function bindTopbar() {
   $('#snapshot').addEventListener('click', snapshot);
   $('#play').addEventListener('click', () => setPlaying(!playing));
   $('#restart').addEventListener('click', () => { seek(0); setPlaying(true); });
+  $('#mute').addEventListener('click', () => {
+    muted = !muted;
+    player.setMuted(muted);
+    $('#mute').classList.toggle('is-muted', muted);
+    $('#mute').setAttribute('aria-pressed', String(muted));
+    syncAudio();
+  });
   $('#loop').addEventListener('click', () => {
     looping = !looping;
     $('#loop').classList.toggle('is-active', looping);
@@ -329,6 +350,7 @@ function bindTopbar() {
     $('#format').value = state.format;
     $('#fps').value = state.fps;
     setCustomBackground(null);
+    setCustomAudio(null);
     persist();
   });
 
@@ -341,6 +363,42 @@ function bindTopbar() {
     else if (e.code === 'Home') { seek(0); }
     else if (e.code === 'End') { setPlaying(false); seek(duration); }
   });
+}
+
+// ---------------------------------------------------------------------- music
+
+const trackBuffers = new Map();
+function trackBuffer(id) {
+  if (!trackBuffers.has(id)) trackBuffers.set(id, loadAudio(TRACKS[id].src));
+  return trackBuffers.get(id);
+}
+
+async function applyMusic() {
+  const id = state.musicTrack;
+  try {
+    audioBuffer = customAudio?.buffer ?? (TRACKS[id]?.src ? await trackBuffer(id) : null);
+  } catch (err) {
+    console.error(err);
+    audioBuffer = null;
+  }
+  player.setBuffer(audioBuffer);
+  player.setVolume(state.musicVolume);
+  $('#mute').hidden = !audioBuffer;
+  syncAudio();
+}
+
+async function setCustomAudio(file) {
+  audioError = '';
+  customAudio = null;
+  if (file) {
+    try {
+      customAudio = { name: file.name, buffer: await decodeAudio(await file.arrayBuffer()) };
+    } catch {
+      audioError = `Couldn't read ${file.name} — try an MP3, WAV or M4A.`;
+    }
+  }
+  sidebar.sync();
+  await applyMusic();
 }
 
 // ---------------------------------------------------------------- backgrounds
@@ -405,11 +463,15 @@ async function boot() {
     defaults,
     onChange: (key) => {
       if (key === 'bgPreset') return selectBackground(state.bgPreset);
+      if (key === 'musicTrack') { persist(); return setCustomAudio(null); }
+      if (key === 'musicVolume') { player.setVolume(state.musicVolume); persist(); return; }
       persist();
       prepare();
     },
-    onImage: (file) => setCustomBackground(file),
-    imageNote: () => customBg && `Using ${customBg.name} with the ${BACKGROUNDS[state.bgPreset].label} look.`,
+    onFile: (key, file) => (key === 'musicFile' ? setCustomAudio(file) : setCustomBackground(file)),
+    fileNote: (key) => (key === 'musicFile'
+      ? (customAudio ? `Using ${customAudio.name} instead of the track above.` : audioError)
+      : customBg && `Using ${customBg.name} with the ${BACKGROUNDS[state.bgPreset].label} look.`),
   });
   bindTopbar();
   bindTimeline();
@@ -422,6 +484,11 @@ async function boot() {
   setPlaying(true);
   document.body.classList.add('is-ready');
   requestAnimationFrame(frame);
+  applyMusic();
+  // Audio may only start after a user gesture: resume and re-sync on the first one.
+  const unlock = () => { player.unlock(); syncAudio(); };
+  window.addEventListener('pointerdown', unlock, { once: true, capture: true });
+  window.addEventListener('keydown', unlock, { once: true, capture: true });
   // Warm up the other images so switching is instant.
   Object.keys(BACKGROUNDS).forEach((id) => presetImage(id).catch(() => {}));
 

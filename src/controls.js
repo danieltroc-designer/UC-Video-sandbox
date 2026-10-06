@@ -20,7 +20,7 @@ function formatValue(c, v) {
   return `${Number(v).toFixed(decimals)}${c.unit ?? ''}`;
 }
 
-export function buildSidebar(root, { sections, state, defaults, onChange, onImage, imageNote }) {
+export function buildSidebar(root, { sections, state, defaults, onChange, onFile, fileNote }) {
   const syncers = [];
   const conditionals = [];
 
@@ -87,7 +87,7 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onImag
         out.textContent = formatValue(c, v);
         out.classList.toggle('is-changed', v !== defaults[c.key]);
       });
-      return el('div', { class: 'field' }, [head(c, out), input]);
+      return el('div', { class: 'field' }, [head(c, out), input, c.hint && el('p', { class: 'hint', text: c.hint })]);
     },
 
     color(c) {
@@ -116,16 +116,17 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onImag
       ]);
     },
 
-    image(c) {
+    // A file the user brings (image, audio); `onFile(key, file|null)` handles it.
+    upload(c) {
       const file = el('input', {
-        type: 'file', accept: 'image/*', hidden: true,
-        onchange: (e) => { const f = e.target.files?.[0]; if (f) onImage(f); e.target.value = ''; },
+        type: 'file', accept: c.accept, hidden: true,
+        onchange: (e) => { const f = e.target.files?.[0]; if (f) onFile(c.key, f); e.target.value = ''; },
       });
       const upload = el('button', { class: 'btn small', type: 'button', onclick: () => file.click() });
-      const remove = el('button', { class: 'btn small ghost', type: 'button', text: 'Remove', onclick: () => onImage(null) });
+      const remove = el('button', { class: 'btn small ghost', type: 'button', text: 'Remove', onclick: () => onFile(c.key, null) });
       const note = el('p', { class: 'hint' });
       syncers.push(() => {
-        const text = imageNote?.();
+        const text = fileNote?.(c.key);
         note.textContent = text || '';
         note.hidden = remove.hidden = !text;
         upload.textContent = text ? 'Replace…' : 'Upload…';

@@ -193,6 +193,9 @@ button { cursor: pointer; }
 .btn.play .i-play { transform: translateX(1px); }
 
 #loop.is-active { color: var(--accent); }
+#mute .i-muted, #mute.is-muted .i-sound { display: none; }
+#mute.is-muted .i-muted { display: block; }
+#mute.is-muted { color: var(--text); }
 
 .time {
   font-variant-numeric: tabular-nums;
@@ -526,5 +529,5 @@ a.btn { text-decoration: none; }
   .stage-wrap { margin: 16px; min-height: 40vh; }
   .sidebar { border-left: 0; border-top: 1px solid var(--line); }
   .transport { grid-template-columns: auto auto 1fr; padding: 8px 16px 14px; }
-  #loop { display: none; }
+  #loop, #mute { display: none; }
 }
