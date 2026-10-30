@@ -4,6 +4,7 @@ import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
 import { buildSidebar } from './controls.js';
 import { exportVideo } from './export.js';
+import { createLibrary } from './library.js';
 
 const STORE_KEY = 'uc-title-studio:v1';
 const STORE_VERSION = 2; // v2+: only values that differ from the defaults are saved
@@ -32,14 +33,14 @@ const diff = (obj, base) => Object.fromEntries(Object.entries(obj).filter(([k, v
 
 const saved = readStore();
 const state = { ...DEFAULTS, ...lookOf(saved.values.bgPreset), ...saved.values };
-if (!['intro', 'outro'].includes(state.mode)) state.mode = DEFAULTS.mode;
+if (!['intro', 'outro', 'library'].includes(state.mode)) state.mode = DEFAULTS.mode;
 // What sliders reset to and what counts as "changed": the defaults, with the
 // active background's own look.
 const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
 // Look tweaks parked for the backgrounds that aren't active right now.
 const bgMemory = saved.bgMemory;
 let activePreset = state.bgPreset;
-let renderer, logo, currentBg, customBg = null, sidebar;
+let renderer, logo, currentBg, customBg = null, sidebar, library;
 let audioBuffer = null, customAudio = null, audioError = '', muted = false;
 const player = createPlayer();
 let time = 0, duration = 1, timeline = null;
@@ -125,6 +126,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (state.mode === 'library') { requestAnimationFrame(frame); return; } // the Library previews in its iframe
   if (playing && !scrubbing) {
     time += dt;
     if (time >= duration) {
@@ -319,7 +321,40 @@ function syncMode() {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-checked', String(on));
   }
+  const lib = state.mode === 'library';
+  document.body.classList.toggle('mode-library', lib);
+  if (lib) setPlaying(false);
+  library?.setActive(lib);
 }
+
+// The export dialog, shared by the canvas export and Library renders.
+const modal = {
+  open(title) {
+    $('#exportModal').hidden = false;
+    $('#exportModal').classList.remove('is-error', 'is-done');
+    $('#exportTitle').textContent = title;
+    $('#exportStatus').textContent = '';
+    $('#exportDownload').hidden = true;
+    $('#exportCancel').textContent = 'Cancel';
+    modal.progress(0);
+  },
+  status(text) { $('#exportStatus').textContent = text; },
+  progress(p) { $('#exportBar').style.width = `${p * 100}%`; $('#exportPct').textContent = `${Math.round(p * 100)}%`; },
+  done(title, pct, text) {
+    $('#exportModal').classList.add('is-done');
+    $('#exportTitle').textContent = title;
+    $('#exportBar').style.width = '100%';
+    $('#exportPct').textContent = pct;
+    $('#exportStatus').textContent = text;
+    $('#exportCancel').textContent = 'Close';
+  },
+  error(text) {
+    $('#exportModal').classList.add('is-error');
+    $('#exportStatus').textContent = text;
+    $('#exportCancel').textContent = 'Close';
+  },
+  close() { $('#exportModal').hidden = true; },
+};
 
 function bindTopbar() {
   syncMode();
@@ -343,13 +378,15 @@ function bindTopbar() {
   const fps = $('#fps');
   fps.replaceChildren(...FPS_OPTIONS.map((v) => new Option(`${v} fps`, v)));
   fps.value = state.fps;
-  fps.addEventListener('change', () => { state.fps = Number(fps.value); persist(); });
+  fps.addEventListener('change', () => { state.fps = Number(fps.value); persist(); library.sync(); });
 
-  $('#export').addEventListener('click', runExport);
-  $('#exportCancel').addEventListener('click', () => {
+  $('#export').addEventListener('click', () => (state.mode === 'library' ? library.exportCurrent() : runExport()));
+  $('#exportCancel').addEventListener('click', async () => {
     if (exportAbort) exportAbort.abort();
+    else if (library.busy) await library.cancel();
     else $('#exportModal').hidden = true;
   });
+  $('#libRestart').addEventListener('click', () => library.restart());
   $('#snapshot').addEventListener('click', snapshot);
   $('#play').addEventListener('click', () => setPlaying(!playing));
   $('#restart').addEventListener('click', () => { seek(0); setPlaying(true); });
@@ -379,7 +416,11 @@ function bindTopbar() {
   });
 
   window.addEventListener('keydown', (e) => {
-    if (e.target.closest('input, textarea, select')) return;
+    if (e.target.closest?.('input, textarea, select')) return;
+    if (state.mode === 'library') {
+      if (e.code === 'Space' || e.code === 'Home') { e.preventDefault(); library.restart(); }
+      return;
+    }
     const step = (e.shiftKey ? 10 : 1) / state.fps;
     if (e.code === 'Space') { e.preventDefault(); setPlaying(!playing); }
     else if (e.code === 'ArrowLeft') { e.preventDefault(); setPlaying(false); seek(time - step); }
@@ -501,13 +542,15 @@ async function boot() {
   });
   bindTopbar();
   bindTimeline();
-  new ResizeObserver(fitStage).observe($('#stageWrap'));
+  library = createLibrary({ state, persist, modal });
+  new ResizeObserver(() => { fitStage(); library.fit(); }).observe($('#stageWrap'));
   // Re-measure text if a font face finishes loading late.
   document.fonts.addEventListener('loadingdone', () => prepare());
 
   prepare();
   fitStage();
-  setPlaying(true);
+  setPlaying(state.mode !== 'library');
+  syncMode(); // activates the Library if that's where we left off
   document.body.classList.add('is-ready');
   requestAnimationFrame(frame);
   applyMusic();

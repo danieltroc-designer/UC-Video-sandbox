@@ -1,0 +1,59 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>encoder</title>
+<!-- Headless encoder tab for render/render.mjs: takes captured frames (PNG,
+     base64) and writes an H.264 MP4 with the same codec choices as the app's
+     own export (src/export.js). Never opened by people. -->
+<script type="module">
+  import { Muxer, ArrayBufferTarget } from '/node_modules/mp4-muxer/build/mp4-muxer.mjs';
+  import { candidates, isSupported } from '/src/export.js';
+
+  let encoder, muxer, target, failure, chunks, fps, label;
+
+  window.encoderReady = true;
+
+  window.startEncoder = async ({ width, height, fps: rate }) => {
+    fps = rate;
+    const bitrate = Math.round(Math.min(80e6, Math.max(10e6, width * height * fps * 0.18)));
+    let config = null;
+    for (const c of candidates(width, height, fps, bitrate)) {
+      if (await isSupported(c)) { config = c; break; }
+    }
+    if (!config) throw new Error(`No H.264 encoder for ${width}x${height}@${fps}`);
+    ({ label } = config);
+    const { label: _, ...encoderConfig } = config;
+    target = new ArrayBufferTarget();
+    muxer = new Muxer({ target, video: { codec: 'avc', width, height, frameRate: fps }, fastStart: 'in-memory' });
+    failure = null;
+    chunks = 0;
+    encoder = new VideoEncoder({
+      output: (chunk, meta) => { muxer.addVideoChunk(chunk, meta); chunks++; },
+      error: (e) => { failure ??= e; },
+    });
+    encoder.configure({ ...encoderConfig, latencyMode: 'quality' });
+    return `${label} (${config.codec}) · ${(bitrate / 1e6).toFixed(0)} Mbps`;
+  };
+
+  window.encodeFrame = async (base64, index) => {
+    if (failure) throw failure;
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const frame = new VideoFrame(bitmap, { timestamp: Math.round((index * 1e6) / fps), duration: Math.round(1e6 / fps) });
+    encoder.encode(frame, { keyFrame: index % (fps * 2) === 0 });
+    frame.close();
+    bitmap.close();
+    while (encoder.encodeQueueSize > 6 && !failure) await new Promise((r) => setTimeout(r, 1));
+  };
+
+  window.finishEncoder = async (frames) => {
+    await encoder.flush();
+    encoder.close();
+    if (failure) throw failure;
+    if (chunks < frames) throw new Error(`encoder dropped frames (${chunks}/${frames})`);
+    muxer.finalize();
+    const bytes = new Uint8Array(target.buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+  };
+</script>

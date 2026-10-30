@@ -1,21 +1,29 @@
 # Uploadcare Title Studio
 
-Animated video title generator. Edit text, tweak motion and background in the sidebar, then export an MP4.
+Animated video titles and booth-deck animations for Uploadcare. Three modes in the top bar:
+
+- **Intro / Outro** — the title sequence, drawn on canvas. Edit text, tweak motion and background in the sidebar, export an MP4 straight from the browser (Chrome, Edge or Safari 17+).
+- **Library** — the cards from the Ecommerce Expo and Webflow booth decks, previewed live and exported in desktop (16:9), mobile (9:16) or square (1:1). Library exports render on your machine, so run the studio locally for them. See [`library/README.md`](library/README.md).
 
 ```bash
-npm start   # → http://localhost:5173
+npm install   # once — only the Library renderer needs it
+npm start     # → http://localhost:5173
 ```
 
-No dependencies — `server.mjs` is a tiny static server (it needs to be served over http, not opened as a file).
+The deployed site is static (`vercel.json`): everything but Library export works there.
 
-- **Preview** renders live on a canvas; scrub the timeline, `Space` to play/pause, `←` `→` to step frames.
-- **Export MP4** renders every frame offline with WebCodecs (no dropped frames) — use Chrome, Edge or Safari 17+.
+- **Preview** renders live; scrub the timeline, `Space` to play/pause, `←` `→` to step frames.
+- **Export MP4** renders every frame offline (no dropped frames).
 - Settings persist in the browser; *Reset all* restores defaults.
 
 | File | What it does |
 | --- | --- |
-| `src/renderer.js` | The animation: layout, timeline and per-frame drawing (deterministic for a given time) |
+| `src/renderer.js` | The title animation: layout, timeline and per-frame drawing (deterministic for a given time) |
 | `src/settings.js` | Defaults and the sidebar schema — add a control here |
 | `src/logo.js` | Splits the lockup SVG into glyph squares and wordmark letters |
 | `src/export.js` | WebCodecs + mp4-muxer export, MediaRecorder fallback |
-| `assets/` | Background image and logo |
+| `src/library.js` | Library mode: deck/card picker, live preview, export through the local API |
+| `library/` | The vendored booth decks and their build (`python3 library/build.py`) |
+| `render/` | Frame-exact headless-Chrome renderer for Library cards (`npm run render`), its local API and regression check |
+| `server.mjs` | Static server; run directly it also serves the render API |
+| `assets/` | Backgrounds and logo |

@@ -2,3 +2,10 @@
 node_modules/
 *.log
 .claude/settings.local.json
+
+# library builds: only deck.html + media/ are served; dist/ is the 14 MB inlined intermediate
+library/*/dist/
+__pycache__/
+*.pyc
+render/_out/
+render/_baseline/

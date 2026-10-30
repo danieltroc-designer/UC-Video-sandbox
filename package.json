@@ -3,7 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Animated video title generator for Uploadcare",
+  "type": "module",
   "scripts": {
-    "start": "node server.mjs . 5173"
+    "start": "node server.mjs . 5173",
+    "render": "node render/render.mjs"
+  },
+  "devDependencies": {
+    "mp4-muxer": "^5.2.1",
+    "puppeteer-core": "^25.16.0"
   }
 }

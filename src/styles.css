@@ -64,7 +64,7 @@ button { cursor: pointer; }
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 200px;
+  width: 280px;
 }
 .mode-switch button { height: 28px; font-size: 12.5px; font-weight: 600; }
 
@@ -155,7 +155,7 @@ button { cursor: pointer; }
   margin: 28px 32px 18px;
 }
 
-#stage {
+#stage, #libFrame {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -541,3 +541,66 @@ a.btn { text-decoration: none; }
   #loop, #mute { display: none; }
   .mode-switch { position: static; transform: none; width: 150px; }
 }
+
+/* ------------------------------------------------------------------ library */
+
+#libFrame { border: 0; }
+body:not(.mode-library) #libFrame,
+body:not(.mode-library) .lib-transport,
+body:not(.mode-library) #library,
+body.mode-library #stage,
+body.mode-library .canvas-transport,
+body.mode-library #controls,
+body.mode-library .select:has(> #format),
+body.mode-library #snapshot { display: none !important; }
+
+.lib-transport { grid-template-columns: auto auto 1fr auto; }
+#libCardName { color: var(--text); font-weight: 600; }
+.lib-progress {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.lib-progress-bar { height: 100%; width: 0; background: var(--accent); border-radius: 4px; }
+
+.lib-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.lib-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lib-card {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lib-card:hover { background: rgba(255, 255, 255, 0.04); }
+.lib-card.is-active { background: var(--panel-2); border-color: var(--line-2); }
+.lib-num { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+.lib-card.is-active .lib-num { color: var(--accent); }
+.lib-text { display: grid; gap: 2px; min-width: 0; }
+.lib-text b { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.lib-text small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.lib-dur { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; padding-top: 1px; }
+
+.lib-formats button { height: auto; padding: 6px 0; display: grid; gap: 1px; }
+.lib-formats small { font-size: 10.5px; color: var(--faint); }
+.lib-formats button.is-pending span { opacity: 0.55; }
+.lib-formats button.is-pending small::after { content: ' · soon'; }
+
+.lib-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lib-actions .btn:disabled { opacity: 0.4; cursor: not-allowed; }

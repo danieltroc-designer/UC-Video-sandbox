@@ -18,14 +18,14 @@ const nextFrame = () => new Promise((r) => setTimeout(r, 0));
 
 // The lowest level that fits — some encoders (notably Safari's) report an
 // over-specified level as supported and then fail on the first frame.
-function avcLevel(width, height, fps) {
+export function avcLevel(width, height, fps) {
   const frameSize = Math.ceil(width / 16) * Math.ceil(height / 16);
   const fit = AVC_LEVELS.find(([, mbps, fs]) => frameSize * fps <= mbps && frameSize <= fs);
   return (fit ?? AVC_LEVELS.at(-1))[0].toString(16).padStart(2, '0');
 }
 
 // Encoder configs to try, best first: High → Main → Baseline → software.
-function candidates(width, height, fps, bitrate) {
+export function candidates(width, height, fps, bitrate) {
   const level = avcLevel(width, height, fps);
   const base = { width, height, framerate: fps, bitrate, avc: { format: 'avc' } };
   return [
@@ -122,7 +122,7 @@ async function encodeSoundtrack(buffer) {
   return { chunks, muxCodec: pick.muxCodec, label: pick.label, sampleRate, numberOfChannels, delay };
 }
 
-async function isSupported({ label, ...config }) {
+export async function isSupported({ label, ...config }) {
   try {
     return (await VideoEncoder.isConfigSupported(config)).supported;
   } catch {

@@ -13,8 +13,14 @@ export const DEFAULTS = {
   format: '1920x1080',
   fps: 60,
 
-  // Intro or outro composition (switched in the top bar)
+  // Intro, outro or library (switched in the top bar)
   mode: 'intro',
+
+  // Library: booth-deck cards, previewed live and rendered by the local renderer
+  libDeck: 'ecommerce-expo',
+  libCard: 0,
+  libFormat: 'landscape',
+  libScale: 1,
 
   // Content
   title: 'The infrastructure\nbehind every file',
