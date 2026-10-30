@@ -1437,6 +1437,269 @@
     .slide.active .sc-chip{animation:none!important}
     .pd-dots[data-state="working"] i{animation:none!important}
   }
+
+  /* =======================================================================
+     Portrait (1080x1920, "Mobile") and square (1080x1080, "Square").
+
+     The same seven cards recomposed as short social clips — a phone held
+     upright, and a feed post — rather than the 16:9 frame shrunk into them.
+     Everything here is scoped under #stage[data-format=…], so the landscape
+     design never sees a single rule of it.
+
+     In these shapes the animation is the point, so each card is framed as a
+     close-up shot of it:
+     - The headline blocks that introduce a demo are dropped (the shared .shd
+       title and subtitle, the "Trusted by" label), and so is everything that
+       only makes sense at the booth (the QR code, "come say hi" and the
+       prize). Text that *is* the content stays: the quote, the feature
+       names, the logos, the UI inside the mockups.
+     - With the headline gone, the demo takes the frame: product UI fills
+       ~88% of the width, centred, and nothing that has to be read drops
+       under ~24px in the 1080 frame (it plays ~390pt wide on a phone).
+     - Safe areas. Portrait keeps what matters inside x 64-1016, y 200-1640,
+       clear of the platform's own chrome top and bottom, optically centred a
+       little above the middle (~y 900); square keeps ~64px all round.
+     - Side-by-side becomes stacked; rows of five become lists; the 4x2 logo
+       wall becomes 2x4.
+     What doesn't change: colours, type families, radii, shadows, the ambient
+     blips, and every beat of the choreography and its timing.
+
+     The ID in each selector also means these outrank `.slide.active …`
+     rules, so nothing below sets opacity or transform on an animated element
+     unless it restates the active state alongside it.
+     ======================================================================= */
+
+  /* the glyph signs off from the bottom-right corner of the safe area in
+     portrait — down at the frame edge it would sit under the caption */
+  #stage[data-format="portrait"] .watermark{right:64px;bottom:284px}
+
+  /* headlines and labels that introduce a demo: the clip opens on the demo */
+  #stage[data-format="portrait"] .shd,
+  #stage[data-format="square"] .shd,
+  #stage[data-format="portrait"] .lw-title,
+  #stage[data-format="square"] .lw-title{display:none}
+
+  /* ---- card 3: the quote. The spread stacks — claim on top, source under
+     it — and the pair flows as one block centred in the frame, so the
+     panels size to their own text instead of to a fixed 465px. ---- */
+  #stage[data-format="portrait"] .qt-wrap,
+  #stage[data-format="square"] .qt-wrap{display:flex;flex-direction:column;justify-content:center;gap:16px}
+  #stage[data-format="portrait"] .qt-wrap{padding:180px 64px 320px}
+  #stage[data-format="square"] .qt-wrap{padding:56px 64px 72px}
+  #stage[data-format="portrait"] .qt-panel,
+  #stage[data-format="square"] .qt-panel{position:relative;top:auto;left:auto;width:auto;height:auto;
+    justify-content:flex-start}
+  #stage[data-format="portrait"] .qt-say{padding:76px 72px 72px;gap:96px}
+  #stage[data-format="portrait"] .qt-quote{font-size:88px;letter-spacing:-1.32px;text-wrap:balance}
+  #stage[data-format="portrait"] .qt-by{font-size:32px}
+  #stage[data-format="portrait"] .qt-who{padding:64px 72px 72px;gap:56px}
+  #stage[data-format="portrait"] .qt-head{gap:30px}
+  #stage[data-format="portrait"] .qt-logo{width:280px}
+  #stage[data-format="portrait"] .qt-tag{font-size:24px;letter-spacing:.24px;padding:7px 18px;border-radius:26px}
+  #stage[data-format="portrait"] .qt-desc{font-size:32px;line-height:1.42}
+  #stage[data-format="square"] .qt-say{padding:60px 60px 56px;gap:56px}
+  #stage[data-format="square"] .qt-quote{font-size:66px;letter-spacing:-.99px;text-wrap:balance}
+  #stage[data-format="square"] .qt-by{font-size:26px}
+  #stage[data-format="square"] .qt-who{padding:48px 60px 52px;gap:32px}
+  #stage[data-format="square"] .qt-head{flex-direction:row;align-items:center;justify-content:space-between}
+  #stage[data-format="square"] .qt-logo{width:220px}
+  #stage[data-format="square"] .qt-tag{font-size:22px;letter-spacing:.22px;padding:6px 16px;border-radius:24px}
+  #stage[data-format="square"] .qt-desc{font-size:26px;line-height:1.4}
+
+  /* ---- card 4: the trusted-by wall, 2x4 and centred in the frame. Slots
+     and mark sizes come from LW_ALT. ---- */
+  #stage[data-format="portrait"] .lw-word{font-size:54px}
+  #stage[data-format="square"] .lw-word{font-size:44px}
+
+  /* ---- card 2: the five capabilities as a list. Each panel turns on its
+     side — label first, then its icon, as in the row — and the wash that
+     travelled left to right now runs top to bottom. ---- */
+  #stage[data-format="portrait"] .ft-row,
+  #stage[data-format="square"] .ft-row{left:64px;width:952px;height:auto;flex-direction:column}
+  #stage[data-format="portrait"] .ft-row{top:292px;gap:22px}
+  #stage[data-format="square"] .ft-row{top:104px;gap:14px}
+  #stage[data-format="portrait"] .ft-card,
+  #stage[data-format="square"] .ft-card{width:auto;flex-direction:row;align-items:center}
+  #stage[data-format="portrait"] .ft-card{height:226px;padding:0 44px 0 64px;border-radius:30px}
+  #stage[data-format="square"] .ft-card{height:160px;padding:0 28px 0 52px;border-radius:26px}
+  #stage[data-format="portrait"] .ft-label{font-size:62px;letter-spacing:-.93px}
+  #stage[data-format="square"] .ft-label{font-size:48px;letter-spacing:-.72px}
+  #stage[data-format="portrait"] .ft-tile{width:140px;height:140px;border-radius:13.8px}
+  #stage[data-format="portrait"] .ft-tile svg{width:70px;height:70px}
+  #stage[data-format="square"] .ft-tile{width:108px;height:108px;border-radius:10.6px}
+  #stage[data-format="square"] .ft-tile svg{width:54px;height:54px}
+
+  /* ---- card 1: a close-up on the uploader. The widget, the dragged stack
+     and the uploading panel are the storyboard's own 400px components drawn
+     `scale`x larger. `scale` is its own property, so it composes with the
+     transforms the choreography animates instead of fighting them, and
+     setupDropin() reads it back for the hover test.
+
+     Origins: widget and panel scale about their centres (their JS tweens
+     pivot there too), the stack about its top-left — so its spring offsets
+     scale with it and the cards still fall into the middle of the zone.
+     Positions below are therefore layout boxes, not what you see; for each
+     shape the visible geometry is
+       portrait  k 2.38  widget 952x1152 at (64,344)   stack at (654,306)
+       square    k 1.78  widget 712x862  at (184,147)  stack at (625,119)
+     with the panel centred in the frame, and the stack keeping the
+     storyboard's offset from the widget, (248,-16) times k — which is what
+     lands the pointer inside the drop zone. The stack still enters on the
+     storyboard's diagonal; scaled with it, it starts off the top-right
+     corner of the frame. ---- */
+  #stage[data-format="portrait"] .di-widget{left:340px;top:677.96px;scale:2.38}
+  #stage[data-format="portrait"] .di-group{left:654.24px;top:305.92px;scale:2.38;transform-origin:0 0}
+  #stage[data-format="portrait"] .di-panel{left:340px;top:835px;scale:2.38}
+  #stage[data-format="square"] .di-widget{left:340px;top:335.76px;scale:1.78}
+  #stage[data-format="square"] .di-group{left:625.44px;top:118.52px;scale:1.78;transform-origin:0 0}
+  #stage[data-format="square"] .di-panel{left:340px;top:463px;scale:1.78}
+
+  /* ---- card 5: a close-up on the marketplace listing. In landscape it is a
+     wide row; here it restacks into the listing's mobile shape — icon beside
+     the name, the blurb under them, and the install button running the full
+     width — and is drawn `scale`x larger about its centre. The .wf-col
+     wrappers dissolve (display:contents) so their children can sit on the
+     panel's grid; every animated element is still the same element. The
+     cursor grows with the listing, and setupInstall() measures its path off
+     the button (see installPath), so it still lands in the button's
+     lower-right whatever the button's size. ---- */
+  #stage[data-format="portrait"] .wf-panel,
+  #stage[data-format="square"] .wf-panel{left:340px;width:400px;height:auto;
+    display:grid;grid-template-columns:89px 1fr;column-gap:24px;align-items:start}
+  #stage[data-format="portrait"] .wf-panel{top:736px;scale:2.38}
+  #stage[data-format="square"] .wf-panel{top:347px;scale:2.2}
+  #stage[data-format="portrait"] .wf-col,
+  #stage[data-format="square"] .wf-col,
+  #stage[data-format="portrait"] .wf-col > div:first-child,
+  #stage[data-format="square"] .wf-col > div:first-child{display:contents}
+  #stage[data-format="portrait"] .wf-tile,
+  #stage[data-format="square"] .wf-tile{grid-row:1 / span 2}
+  #stage[data-format="portrait"] .wf-name,
+  #stage[data-format="square"] .wf-name{grid-column:2;grid-row:1;align-self:end}
+  #stage[data-format="portrait"] .wf-meta,
+  #stage[data-format="square"] .wf-meta{grid-column:2;grid-row:2;align-self:start}
+  #stage[data-format="portrait"] .wf-desc,
+  #stage[data-format="square"] .wf-desc{grid-column:1 / -1;grid-row:3;margin-top:28px}
+  #stage[data-format="portrait"] .wf-btnwrap,
+  #stage[data-format="square"] .wf-btnwrap{grid-column:1 / -1;grid-row:4;width:auto;margin-top:30px}
+  #stage[data-format="portrait"] .wf-cursor{width:43px;height:60px}
+  #stage[data-format="square"] .wf-cursor{width:40px;height:55px}
+
+  /* ---- card 6: a close-up on the three-panel demo. The site's row of
+     upload | analyse | deliver is re-dealt for each shape, still reading in
+     that order:
+       portrait  three bands stacked top to bottom. The middle band lays its
+                 pieces out across — pixel grid, ring, readout — and its two
+                 dot trails turn vertical, so they sit *between* the bands
+                 and still point from upload to analysis and on to delivery.
+                 The delivery band puts the picture beside its URL.
+       square    upload and analyse side by side, as on the site, with the
+                 delivery band running the full width under them — the URL
+                 is the one thing here that needs the room.
+     The shell is laid out narrower than the frame and drawn `scale`x up
+     about its centre (the individual `translate` centres it, and sits
+     outside the scale), so the cursor's travel, the pixel canvas and the
+     radii all grow with it. Mono is set so it reads at ~24px on screen. The
+     compliance marks are a footnote to this card, not part of the demo, so
+     the close-up leaves them out. ---- */
+  #stage[data-format="portrait"] .pd-badge,
+  #stage[data-format="square"] .pd-badge{display:none}
+  #stage[data-format="portrait"] .pd-shell,
+  #stage[data-format="square"] .pd-shell{height:auto;translate:0 -50%}
+  #stage[data-format="portrait"] .pd-shell{left:200px;top:900px;width:680px;scale:1.4}
+  #stage[data-format="square"] .pd-shell{left:170.5px;top:540px;width:739px;scale:1.28}
+  #stage[data-format="portrait"] .pd-grid,
+  #stage[data-format="square"] .pd-grid{height:auto}
+  #stage[data-format="portrait"] .pd-grid{grid-template-columns:1fr;gap:0}
+  #stage[data-format="square"] .pd-grid{grid-template-columns:310px 1fr;gap:16px}
+  #stage[data-format="square"] .pd-grid > .pd-cell:nth-child(3){grid-column:1 / -1}
+  #stage[data-format="portrait"] .pd-cell,
+  #stage[data-format="square"] .pd-cell{padding:26px}
+  #stage[data-format="portrait"] .pd-ph,
+  #stage[data-format="square"] .pd-ph{font-size:17.5px}
+  #stage[data-format="portrait"] .pd-status i,
+  #stage[data-format="square"] .pd-status i{width:10px;height:10px}
+  #stage[data-format="portrait"] .pd-status span{font-size:17.5px}
+  #stage[data-format="square"] .pd-status span{font-size:18.5px}
+  /* the analysis band (portrait): the progress row dissolves into the
+     band's own grid, so its dot trails can take the rows above and below */
+  #stage[data-format="portrait"] .pd-cell.mid{display:grid;padding:4px 0;gap:6px 30px;
+    grid-template-columns:1fr auto 1fr;grid-template-areas:". d1 ." "px dn an" ". d2 .";align-items:center}
+  #stage[data-format="portrait"] .pd-prog{display:contents}
+  #stage[data-format="portrait"] .pd-prog-side{flex:none;padding:12px 0}
+  #stage[data-format="portrait"] .pd-prog-side:first-child{grid-area:d1}
+  #stage[data-format="portrait"] .pd-prog-side:last-child{grid-area:d2}
+  #stage[data-format="portrait"] .pd-dots{flex-direction:column}
+  #stage[data-format="portrait"] .pd-dots,
+  #stage[data-format="square"] .pd-dots{gap:5px}
+  #stage[data-format="portrait"] .pd-dots i,
+  #stage[data-format="square"] .pd-dots i{width:4px;height:4px}
+  #stage[data-format="portrait"] .pd-donut{grid-area:dn;width:34px;height:34px}
+  #stage[data-format="portrait"] .pd-pixel{grid-area:px;justify-self:end}
+  #stage[data-format="portrait"] .pd-analysis{grid-area:an;justify-self:start;text-align:left;
+    padding-bottom:0;font-size:17.5px;line-height:24px}
+  #stage[data-format="square"] .pd-cell.mid{padding:20px 0}
+  #stage[data-format="square"] .pd-pixel{width:110px;height:143px}
+  #stage[data-format="square"] .pd-analysis{font-size:18.5px;line-height:24px;padding-bottom:0}
+  /* the delivery band: picture beside its URL */
+  #stage[data-format="portrait"] .pd-grid > .pd-cell:nth-child(3),
+  #stage[data-format="square"] .pd-grid > .pd-cell:nth-child(3){flex-direction:row;gap:24px;padding:20px}
+  #stage[data-format="portrait"] .pd-stage,
+  #stage[data-format="square"] .pd-stage{width:186px;height:240px;margin-top:0}
+  #stage[data-format="portrait"] .pd-url{width:400px;height:112.5px;margin-top:0;font-size:17px;line-height:22.5px}
+  #stage[data-format="portrait"] .pd-body{height:90px}
+  #stage[data-format="square"] .pd-url{width:440px;height:117px;margin-top:0;font-size:18.5px;line-height:23.4px}
+  #stage[data-format="square"] .pd-body{height:93.6px}
+  #stage[data-format="portrait"] .pd-url .indent,
+  #stage[data-format="square"] .pd-url .indent{padding-left:16px}
+
+  /* ---- card 7: the outro as a shot of the file board. The headline, the
+     booth's sign-off ("come say hi", the prize) and the QR are booth
+     furniture and go; what moves stays — the globe, the sparkling glyph, the
+     four floating files typing out their telemetry, the signal dots — with
+     the lockup under the glyph to sign it. Node and dot positions are in
+     HB_ALT; the nodes scale about their top-left corner from there.
+       portrait  the wireframe turned on its side (995x1797 — the same
+                 margins as the landscape frame, rotated), centred on the
+                 glyph at (540,900)
+       square    the wireframe drawn square, its strokes kept at their own
+                 width so the stretch doesn't thicken the horizontals
+     `rotate`/`scale` are their own properties, so they compose with the
+     globe's slow breathe, which animates `transform`. ---- */
+  #stage[data-format="portrait"] .hb-outro,
+  #stage[data-format="square"] .hb-outro,
+  #stage[data-format="portrait"] .hb-outro-sub,
+  #stage[data-format="square"] .hb-outro-sub,
+  #stage[data-format="portrait"] .hb-outro-qr,
+  #stage[data-format="square"] .hb-outro-qr{display:none}
+  /* the landscape centring translate lives in `transform`, inside the
+     rotation, where a quarter turn would throw it sideways; portrait centres
+     with the individual `translate`, which sits outside it, and breathes on
+     scale alone */
+  #stage[data-format="portrait"] .hb-globe{top:900px;transform:none;translate:-50% -50%;rotate:90deg;scale:.96}
+  #stage[data-format="portrait"] .hb-globe.spin{animation-name:hbGlobeP}
+  @keyframes hbGlobeP{0%,100%{transform:scale(1)}50%{transform:scale(1.012)}}
+  #stage[data-format="square"] .hb-globe{top:513px;width:1000px;height:1000px}
+  #stage[data-format="square"] .hb-globe svg *{vector-effect:non-scaling-stroke}
+  #stage[data-format="portrait"] .hb-mark{left:497px;top:857px;scale:2.2}
+  #stage[data-format="square"] .hb-mark{left:497px;top:470px;scale:1.8}
+  #stage[data-format="portrait"] .hb-sign{left:447.5px;top:1086.5px;scale:2}
+  #stage[data-format="square"] .hb-sign{left:447.5px;top:660px;scale:1.6}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-node{scale:1.9;transform-origin:0 0}
+  #stage[data-format="square"] .hb-outro-mode .hb-node{scale:1.45;transform-origin:0 0}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-meta,
+  #stage[data-format="square"] .hb-outro-mode .hb-meta{font-size:10px}
+  /* The two files on the right keep their telemetry on the inside, facing
+     the glyph, where the landscape board runs it outward — out there it
+     would leave the frame. The car's nine-line log goes under its card,
+     ranged right; the document's goes to its left. Same LED, same lines. */
+  #stage[data-format="portrait"] .hb-outro-mode .n3 .hb-meta,
+  #stage[data-format="square"] .hb-outro-mode .n3 .hb-meta{left:auto!important;right:0;
+    top:calc(100% + 34px)!important;text-align:right}
+  #stage[data-format="portrait"] .hb-outro-mode .n3 .hb-led,
+  #stage[data-format="square"] .hb-outro-mode .n3 .hb-led{left:auto!important;right:0;top:calc(100% + 20px)!important}
+  #stage[data-format="portrait"] .hb-outro-mode .n4 .hb-meta,
+  #stage[data-format="square"] .hb-outro-mode .n4 .hb-meta{left:auto!important;right:calc(100% + 14px);text-align:right}
 </style>
 </head>
 <body>
@@ -1799,8 +2062,16 @@ const EMBED = (()=>{
   return { card: Math.max(0, parseInt(q.get('card'), 10) || 0), format, hold: q.has('hold') };
 })();
 if (EMBED){ document.body.classList.add('embed'); stage.dataset.format = EMBED.format; }
+/* The stage shape this page plays in. Landscape is the original design; the
+   portrait and square paths only ever branch away from it, never alter it. */
+const FMT = (EMBED && EMBED.format) || 'landscape';
 /* Shapes each card type has been recomposed for, beyond its original 16:9. */
-const CARD_FORMATS = {};
+const CARD_FORMATS = {
+  dropin:['portrait','square'], features:['portrait','square'], quote2:['portrait','square'],
+  logos:['portrait','square'], install:['portrait','square'], pipeline:['portrait','square'],
+  // the board's outro layout only — the hero board has no portrait/square cut
+  board:['portrait','square'],
+};
 function fit(){
   const s = Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight);
   stage.style.transform = `scale(${s})`;
@@ -2024,6 +2295,19 @@ const LOGO_BOX = { zapier:[158,41], soundcloud:[256,32], loreal:[168,32],
    optically even. Slot i takes logo i, so editing the list still works. */
 const LW_SLOTS = [[358,436.5],[769,432],[1179,437],[1577,432.4],
                   [345.5,693],[769,680.5],[1175.5,677],[1578,683]];
+/* The same wall restacked 2x4 for portrait and square, still in reading order
+   (left to right, top to bottom), centred in the frame — there's no "Trusted
+   by" label over it in these shapes — and drawn `k` times larger so each mark
+   holds its own against a 1080-wide frame. The marks keep their relative sizes —
+   that balance is the storyboard's — so only the slots and one scale change.
+   Rows sit on a regular pitch; UserTesting's speech-bubble lockup is the one
+   tall mark and gets a few px of optical lift. */
+const LW_ALT = {
+  portrait: { k:1.6, slots:[[300,520],[780,520],[300,780],[780,780],
+                            [300,1036],[780,1040],[300,1300],[780,1300]] },
+  square:   { k:1.32, slots:[[300,250],[780,250],[300,440],[780,440],
+                             [300,627],[780,630],[300,820],[780,820]] },
+};
 
 /* ---- pipeline card (the website's demo) ----
    The three transforms the URL grows, in order. Each one has a matching
@@ -2128,9 +2412,13 @@ const R = {
   },
   /* ---- card 2: five capability panels, icons landing one at a time ---- */
   features(s){
+    // portrait and square stack the panels as a list, where each label has a
+    // whole row to itself — the storyboard's two-line breaks would just leave
+    // half of every row empty, so there the label runs on one line
+    const label = f => FMT==='landscape' ? multiline(f.label) : esc(f.label.replace(/\n/g,' '));
     const cards = FEATURES.map((f,i)=>`
       <div class="ft-card" style="--i:${i};--ac:${f.ac}">
-        <div class="ft-label">${multiline(f.label)}</div>
+        <div class="ft-label">${label(f)}</div>
         <div class="ft-tile" style="--i:${i}">${CAPS[f.icon]||''}</div>
       </div>`).join('');
     return `<div class="ft-wrap"><div class="ft-row">${cards}</div></div>`;
@@ -2156,6 +2444,7 @@ const R = {
   /* ---- card 4: trusted-by wall, marks landing in reading order ---- */
   logos(s){
     const list = (s.logos||'').split(',').map(x=>x.trim()).filter(Boolean);
+    if (LW_ALT[FMT]) return R.logosAlt(s, list, LW_ALT[FMT]);
     const marks = list.slice(0, LW_SLOTS.length).map((n,i)=>{
       const key = logoKey(n), svg = LOGOS[key];
       const [cx,cy] = LW_SLOTS[i];
@@ -2165,6 +2454,24 @@ const R = {
              + `translate:-50% -50%">${esc(n)}</span>`;
       }
       const [w,h] = LOGO_BOX[key] || [180,32];
+      return `<span class="lw-logo" style="--i:${i};left:${cx - w/2}px;`
+           + `top:${cy - h/2}px;width:${w}px;height:${h}px">${svg}</span>`;
+    }).join('');
+    return `<div class="lw-wrap">
+      ${s.title?`<div class="lw-title">${esc(s.title)}</div>`:''}
+      ${marks}
+    </div>`;
+  },
+  /* the portrait / square wall: same marks, same markup, its own slots */
+  logosAlt(s, list, {k, slots}){
+    const marks = list.slice(0, slots.length).map((n,i)=>{
+      const key = logoKey(n), svg = LOGOS[key];
+      const [cx,cy] = slots[i];
+      if (!svg){
+        return `<span class="lw-word" style="--i:${i};left:${cx}px;top:${cy}px;`
+             + `translate:-50% -50%">${esc(n)}</span>`;
+      }
+      const [w,h] = (LOGO_BOX[key] || [180,32]).map(v=>v*k);
       return `<span class="lw-logo" style="--i:${i};left:${cx - w/2}px;`
            + `top:${cy - h/2}px;width:${w}px;height:${h}px">${svg}</span>`;
     }).join('');
@@ -2477,7 +2784,8 @@ const R = {
        set is storyboard frame 184:5666 to the pixel — four small files pushed
        into the corners with their telemetry beside them, leaving the whole
        centre line to the lockup, headline, glyph and sign-off. */
-    const G = outro ? {
+    const alt = outro && HB_ALT[FMT];
+    const G = alt ? alt.G : outro ? {
       n1:['left:272px;top:219px',    100, 143, 117.66, 100.66],
       n2:['left:311px;top:778px',    105, 147, 123.88,       0],
       n3:['left:1342.44px;top:203px', 134.27, 94.72, 158.01, 16.38],
@@ -2500,8 +2808,8 @@ const R = {
          <div class="hb-title">${multiline(title)}</div>`;
     /* [class, x, y, size] — the storyboard scatters five, two sizes */
     const dots = outro
-      ? [['y',589,86,4],['g',842,340,7],['y',1019.27,610.05,4],
-         ['g',1167.4,823.73,7],['y',1422,686,4]]
+      ? (alt ? alt.dots : [['y',589,86,4],['g',842,340,7],['y',1019.27,610.05,4],
+         ['g',1167.4,823.73,7],['y',1422,686,4]])
         .map(([c,x,y,d])=>`<div class="hb-dot ${c}" style="left:${x}px;top:${y}px;width:${d}px;height:${d}px"></div>`)
         .join('')
       : `<div class="hb-dot g" style="left:16%;top:44%"></div>
@@ -2854,6 +3162,32 @@ function animateLogo(container){
   }
 }
 
+/* The outro in portrait and square. Same four files with the same telemetry
+   beside them (card sizes and meta offsets are the storyboard's, copied from
+   the landscape outro); only where each one floats changes, and the nodes are
+   drawn larger with CSS `scale` about their top-left corner, so a position
+   here is the corner of the card. With the headline, the sign-off and the QR
+   gone, the glyph is the centre of the shot: two files ride above it and two
+   below, one in each corner, their telemetry turned inward (see the outro
+   CSS) so it never leaves the frame or runs into a neighbour. The five
+   signal dots are re-scattered into the gaps between them. */
+const HB_OUTRO_G = {
+  n1:[100, 143, 117.66, 100.66], n2:[105, 147, 123.88, 0],
+  n3:[134.27, 94.72, 158.01, 16.38], n4:[67, 83, 81, 2.05],
+};
+const hbAlt = (pos, dots)=>({
+  G: Object.fromEntries(Object.entries(HB_OUTRO_G).map(([k,v])=>[k, [pos[k], ...v]])),
+  dots,
+});
+const HB_ALT = {
+  portrait: hbAlt({ n1:'left:84px;top:280px',   n3:'left:761px;top:300px',
+                    n2:'left:84px;top:1200px',  n4:'left:889px;top:1400px' },
+    [['y',612,250,4],['g',200,700,7],['y',860,1170,4],['g',560,1580,7],['y',430,880,4]]),
+  square:   hbAlt({ n1:'left:84px;top:84px',    n3:'left:821px;top:90px',
+                    n2:'left:84px;top:790px',   n4:'left:919px;top:880px' },
+    [['y',560,100,4],['g',150,450,7],['y',780,560,4],['g',600,980,7],['y',330,640,4]]),
+};
+
 /* ---------------- file-board: terminal typewriter ----------------
    Each meta block is a list of lines; each line is a list of
    [text, className] segments. Empty line = spacer. The text types
@@ -2944,6 +3278,12 @@ function typeMeta(metaEl, spec, speed, tl){
 function setupBoard(slideEl, sd, tl){
   const globe = slideEl.querySelector('.hb-globe');
   if (globe && sd.globe!==false && !REDUCED) globe.classList.add('spin');
+  // square draws the wireframe as a square rather than letterboxing a 16:9
+  // one; its strokes are held at their own width (see the outro CSS)
+  if (globe && FMT === 'square'){
+    const svg = globe.querySelector('svg');
+    if (svg) svg.setAttribute('preserveAspectRatio', 'none');
+  }
 
   /* Sparkle the centre glyph: every pixel gets its own slow cycle, its own
      phase and its own floor and ceiling, so the mark shimmers without any of
@@ -3077,6 +3417,27 @@ function setupCode(slideEl, sd, tl){
    instead of stopping dead on a schedule. */
 const WF_INSTALL_MS = 1150;   // must match .wf-btn[data-state="1"] .wf-sweep
 
+/* Portrait and square restack the listing and draw it `scale`x larger (see
+   the card 5 rules in the stylesheet), so the pointer's path is measured off
+   the button rather than written in. Layout offsets don't see transforms, so
+   the panel's entrance slide is left out of the reckoning, which is right:
+   it has long settled by the time the pointer moves. The panel scales about
+   its centre. The landing point is the landscape one — 24px in from the
+   button's right edge, 30px down — in the listing's own px; the pointer
+   starts below and to the right of it, on screen, so it is seen arriving. */
+const WF_START_OFFSET = { portrait:{x:20, y:300}, square:{x:100, y:190} };
+function installPath(btn){
+  const wrap = btn.parentElement, panel = btn.closest('.wf-panel');
+  const k = parseFloat(getComputedStyle(panel).scale) || 1;
+  const px = panel.offsetLeft + panel.offsetWidth  * (1 - k) / 2;
+  const py = panel.offsetTop  + panel.offsetHeight * (1 - k) / 2;
+  const bx = px + (panel.clientLeft + wrap.offsetLeft) * k;
+  const by = py + (panel.clientTop  + wrap.offsetTop)  * k;
+  const target = { x: Math.round(bx + (wrap.offsetWidth - 24) * k), y: Math.round(by + 30 * k) };
+  const off = WF_START_OFFSET[FMT] || {x:0, y:0};
+  return { target, start: { x: target.x + off.x, y: target.y + off.y } };
+}
+
 function setupInstall(slideEl, sd, tl){
   const btn    = slideEl.querySelector('.wf-btn');
   const cursor = slideEl.querySelector('.wf-cursor');
@@ -3097,7 +3458,8 @@ function setupInstall(slideEl, sd, tl){
   // which is the one thing on this card that has to stay readable while it
   // changes. START is well clear of the panel, down and to the right, so the
   // trip is long enough to read as a trip.
-  const TARGET = {x:946, y:776}, START = {x:1428, y:1006};
+  const path = FMT === 'landscape' ? null : installPath(btn);
+  const TARGET = path ? path.target : {x:946, y:776}, START = path ? path.start : {x:1428, y:1006};
   cursor.style.opacity = 0;
   cursor.style.transform = `translate(${START.x}px,${START.y}px)`;
 
@@ -3148,6 +3510,27 @@ function setupInstall(slideEl, sd, tl){
    arriving on a fixed schedule. Everything else is transform and opacity, bar
    the ring, where stroke-dashoffset is the only way to draw a partial arc. */
 const DI_RING_LEN = 57.6;                       // 2πr at r=9.167, the arc's dasharray
+
+/* The hover test for portrait and square, where the widget and the dragged
+   stack are drawn larger with the CSS `scale` property. A scale doesn't move
+   offsetLeft/offsetTop, so the landscape test (pure layout offsets) would be
+   comparing a scaled pointer against an unscaled zone. Here everything is
+   taken to frame px first: the widget scales about its centre, the stack
+   about its top-left corner — so the spring's own offsets scale with it. */
+function dropinCrossing(widget, drop, group, cur, FROM, OVER, FLY){
+  if (!cur) return null;
+  const k  = v => parseFloat(getComputedStyle(v).scale) || 1;
+  const kw = k(widget), kg = k(group);
+  const wx = widget.offsetLeft + widget.offsetWidth  * (1 - kw) / 2;
+  const wy = widget.offsetTop  + widget.offsetHeight * (1 - kw) / 2;
+  const zx = wx + drop.offsetLeft * kw, zy = wy + drop.offsetTop * kw;
+  const zw = drop.offsetWidth * kw,     zh = drop.offsetHeight * kw;
+  return springCrossing(FROM, OVER, FLY, o=>{
+    const x = group.offsetLeft + (cur.offsetLeft + (o.x||0)) * kg;
+    const y = group.offsetTop  + (cur.offsetTop  + (o.y||0)) * kg;
+    return x >= zx && x <= zx + zw && y >= zy && y <= zy + zh;
+  });
+}
 
 function setupDropin(slideEl, sd, tl){
   const drop   = slideEl.querySelector('.di-drop');
@@ -3201,7 +3584,8 @@ function setupDropin(slideEl, sd, tl){
   // the stage is scaled to the display.
   const tip = cur && {x:group.offsetLeft + cur.offsetLeft, y:group.offsetTop + cur.offsetTop};
   const zx = widget.offsetLeft + drop.offsetLeft, zy = widget.offsetTop + drop.offsetTop;
-  const cross = tip && springCrossing(FROM, OVER, FLY, o=>{
+  const cross = FMT !== 'landscape' ? dropinCrossing(widget, drop, group, cur, FROM, OVER, FLY)
+    : tip && springCrossing(FROM, OVER, FLY, o=>{
     const x = tip.x + (o.x||0), y = tip.y + (o.y||0);
     return x >= zx && x <= zx + drop.offsetWidth
         && y >= zy && y <= zy + drop.offsetHeight;

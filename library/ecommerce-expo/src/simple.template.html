@@ -1970,6 +1970,285 @@
     .eb-card,.el-logo{transition:none!important;opacity:1!important;transform:none!important}
     .ce-prompt-cursor{animation:none!important}
   }
+
+  /* =======================================================================
+     Phone and feed shapes — portrait 1080x1920 ("Mobile") and square
+     1080x1080 ("Square").
+
+     Each card is recomposed for the shape rather than shrunk: panels restack,
+     product UIs fill the width, and nothing that has to be read drops below
+     ~26px in the 1080-wide frame, which is what survives on a ~390pt phone.
+     Portrait keeps everything that matters inside x 64-1016 / y 200-1640,
+     clear of the platform chrome top and bottom; square keeps a 64px margin.
+
+     Every rule here is scoped to #stage[data-format=…], so the 1920x1080
+     landscape design never sees any of it.
+     ======================================================================= */
+  /* the brand glyph keeps its corner, pulled inside the safe area */
+  #stage[data-format="portrait"] .watermark{right:64px;bottom:248px}
+  #stage[data-format="square"] .watermark{right:45px;bottom:43px}
+
+  /* ---- card 3 — the Zephyr spread restacks: claim on top, source below ---- */
+  #stage[data-format="portrait"] .em-wrap,
+  #stage[data-format="square"] .em-wrap{display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:16px}
+  #stage[data-format="portrait"] .em-wrap .qt-panel,
+  #stage[data-format="square"] .em-wrap .qt-panel{position:relative;top:auto;left:auto;
+    width:952px;height:auto;flex:none;justify-content:flex-start}
+  #stage[data-format="portrait"] .em-wrap{padding-bottom:120px}
+  #stage[data-format="portrait"] .em-wrap .qt-say{padding:80px 80px 96px;min-height:620px}
+  #stage[data-format="portrait"] .em-wrap .qt-quote{font-size:100px;letter-spacing:-.015em;
+    margin-right:0;gap:56px}
+  #stage[data-format="portrait"] .em-wrap .qt-quote p{text-wrap:balance}
+  #stage[data-format="portrait"] .em-wrap .qt-who{padding:64px;gap:72px}
+  #stage[data-format="portrait"] .em-wrap .qt-logo,
+  #stage[data-format="portrait"] .em-wrap .qt-logo svg{width:160px;height:130px}
+  #stage[data-format="portrait"] .em-quote{font-size:36px;line-height:1.4;margin-bottom:24px}
+  #stage[data-format="portrait"] .em-attribution{font-size:26px}
+
+  /* each sentence takes two lines, as in portrait: the claim reads as a stack
+     of short beats rather than one line and one wrapped line */
+  #stage[data-format="square"] .em-wrap .qt-say{padding:64px 64px 72px;min-height:430px}
+  #stage[data-format="square"] .em-wrap .qt-quote{font-size:76px;letter-spacing:-.015em;
+    margin-right:0;gap:40px}
+  #stage[data-format="square"] .em-wrap .qt-quote p{text-wrap:balance;max-width:640px}
+  #stage[data-format="square"] .em-wrap .qt-who{padding:48px 64px;gap:40px}
+  #stage[data-format="square"] .em-wrap .qt-logo,
+  #stage[data-format="square"] .em-wrap .qt-logo svg{width:110px;height:90px}
+  #stage[data-format="square"] .em-quote{font-size:30px;line-height:1.4;margin-bottom:16px}
+  #stage[data-format="square"] .em-attribution{font-size:26px}
+
+  /* ---- card 2 — five benefits on a two-column grid; the trust marks take
+     the sixth cell (EB_BADGE_SHAPES). Each panel keeps the landscape anatomy —
+     copy top-left, icon well bottom-left — and the copy wraps where it did
+     there, because the max-widths are the landscape measure in ems. ---- */
+  #stage[data-format="portrait"] .eb-row,
+  #stage[data-format="square"] .eb-row{left:64px;width:952px;height:auto;display:grid;
+    grid-template-columns:1fr 1fr;gap:16px}
+  #stage[data-format="portrait"] .eb-row{top:336px;grid-auto-rows:392px}
+  #stage[data-format="square"] .eb-row{top:80px;grid-auto-rows:296px}
+  #stage[data-format="portrait"] .eb-card,
+  #stage[data-format="square"] .eb-card{width:auto;height:auto}
+  #stage[data-format="portrait"] .eb-copy,
+  #stage[data-format="square"] .eb-copy{width:auto}
+  #stage[data-format="portrait"] .eb-benefit,
+  #stage[data-format="square"] .eb-benefit{letter-spacing:-.015em;max-width:6.6em}
+  #stage[data-format="portrait"] .eb-feature,
+  #stage[data-format="square"] .eb-feature{letter-spacing:-.015em;max-width:11.6em}
+  #stage[data-format="portrait"] .eb-card{padding:44px}
+  #stage[data-format="portrait"] .eb-copy{gap:22px}
+  #stage[data-format="portrait"] .eb-benefit{font-size:48px}
+  #stage[data-format="portrait"] .eb-feature{font-size:30px}
+  #stage[data-format="portrait"] .eb-icon{width:112px;height:112px;border-radius:11px}
+  #stage[data-format="portrait"] .eb-icon svg{width:56px;height:56px}
+  #stage[data-format="square"] .eb-card{padding:36px}
+  #stage[data-format="square"] .eb-copy{gap:16px}
+  #stage[data-format="square"] .eb-benefit{font-size:38px}
+  #stage[data-format="square"] .eb-feature{font-size:26px}
+  #stage[data-format="square"] .eb-icon{width:80px;height:80px;border-radius:9px}
+  #stage[data-format="square"] .eb-icon svg{width:42px;height:42px}
+
+  /* ---- the phone cuts are short clips: the demo is the point, so the
+     storyboard headline block that introduces it (.shd title + subtitle) is
+     dropped in both shapes, and each card frames its animation as a close-up
+     instead ---- */
+  #stage[data-format="portrait"] .shd,
+  #stage[data-format="square"] .shd{display:none}
+
+  /* ---- card 1 — framed as a close-up. The whole card is drawn on a smaller
+     local canvas (1080/k x 1920/k) and .ef-wrap scales it by k, so the real
+     uploader, the analysis cell and the storefront all grow together and every
+     coordinate the score measures (offsetLeft/Top) stays in one space.
+     Portrait  k=1.6, canvas 675x1200: the cells stack — uploader on top, the
+               analysis below it laid out sideways (photo | readout).
+     Square    k=1.24, canvas 871x871: the cells stay side by side, narrowed
+               to the widget and the photo.
+     The dragged file starts low over the widget and is thrown up into the
+     drop zone (its landing is measured in setupCommerceFlow). The storefront
+     restacks to a phone-shaped product page in portrait and keeps its two
+     columns in square; both run off the bottom of the frame like the
+     landscape browser does. ---- */
+  #stage[data-format="portrait"] .ef-wrap,
+  #stage[data-format="square"] .ef-wrap{inset:auto;left:0;top:0;transform-origin:0 0}
+  #stage[data-format="portrait"] .ef-wrap{width:675px;height:1200px;transform:scale(1.6)}
+  #stage[data-format="square"] .ef-wrap{width:871px;height:871px;transform:scale(1.24)}
+  #stage[data-format="portrait"] .ef-cell,
+  #stage[data-format="square"] .ef-cell{height:auto}
+  #stage[data-format="portrait"] .ef-process{left:40px;top:127px;width:595px;height:896px}
+  #stage[data-format="portrait"] .ef-grid{grid-template-columns:minmax(0,1fr);
+    grid-template-rows:500px 350px}
+  #stage[data-format="portrait"] .ef-drag{left:8px;top:300px}
+  #stage[data-format="portrait"] .ef-right{display:grid;grid-template-columns:258px minmax(0,1fr);
+    grid-template-rows:1fr auto auto 1fr;column-gap:20px;padding:0 24px;align-items:center}
+  #stage[data-format="portrait"] .ef-analyse-photo{grid-column:1;grid-row:1 / 5}
+  #stage[data-format="portrait"] .ef-prog{grid-column:2;grid-row:2;height:56px}
+  #stage[data-format="portrait"] .ef-analysis{grid-column:2;grid-row:3;height:auto;padding-bottom:0;
+    font-size:16px;line-height:26px}
+  #stage[data-format="portrait"] .ef-wash{left:153px}
+  #stage[data-format="square"] .ef-process{left:52.5px;top:158.5px;width:766px;height:554px}
+  #stage[data-format="square"] .ef-grid{grid-template-columns:420px 300px}
+  #stage[data-format="square"] .ef-drag{left:0;top:330px}
+  #stage[data-format="square"] .ef-analysis{font-size:20px;line-height:28px;height:84px}
+  #stage[data-format="portrait"] .ef-uname,
+  #stage[data-format="square"] .ef-uname{font-size:15px}
+
+  #stage[data-format="portrait"] .ef-site{left:40px;top:120px;width:595px;height:1100px}
+  #stage[data-format="portrait"] .ef-sitebody{height:1043px}
+  #stage[data-format="portrait"] .ef-site-back{left:24px;top:18px}
+  #stage[data-format="portrait"] .ef-site-photo{left:24px;top:52px;width:547px;height:540px}
+  #stage[data-format="portrait"] .ef-site-info{left:24px;top:620px;width:547px}
+  #stage[data-format="portrait"] .ef-site-title{top:0;width:547px;font-size:36px;letter-spacing:-.54px}
+  #stage[data-format="portrait"] .ef-site-tags{top:84px}
+  #stage[data-format="portrait"] .ef-site-cta{top:128px}
+  #stage[data-format="portrait"] .ef-site-copy{top:196px;width:547px;font-size:15px}
+  #stage[data-format="square"] .ef-site{left:52.5px;top:52px;width:766px;height:880px}
+  #stage[data-format="square"] .ef-sitebody{height:823px}
+  #stage[data-format="square"] .ef-site-back{left:24px;top:18px}
+  #stage[data-format="square"] .ef-site-photo{left:24px;top:50px;width:380px;height:400px}
+  #stage[data-format="square"] .ef-site-info{left:432px;width:310px}
+  #stage[data-format="square"] .ef-site-title{top:64px;width:310px;font-size:32px;letter-spacing:-.48px}
+  #stage[data-format="square"] .ef-site-tags{top:148px;flex-wrap:wrap;width:310px;row-gap:3px}
+  #stage[data-format="square"] .ef-site-cta{top:200px}
+  #stage[data-format="square"] .ef-site-copy{top:268px;width:310px;font-size:14px}
+
+  /* ---- card 4 — the same close-up camera as card 1 (k=1.6 / 1.24 on the
+     same local canvases), so the two cards' storefronts share one set of
+     rules. The backend drops to a single column — Media first, which keeps
+     the catalogue image and its Edit with AI pill exactly where the score's
+     pill seat expects them — and the editor stacks a larger photo over the
+     composer, with Cancel / Add to media along the bottom. The editor seats
+     are measured in setupCommerceEditor. ---- */
+  #stage[data-format="portrait"] .ce-wrap,
+  #stage[data-format="square"] .ce-wrap{inset:auto;left:0;top:0;transform-origin:0 0}
+  #stage[data-format="portrait"] .ce-wrap{width:675px;height:1200px;transform:scale(1.6)}
+  #stage[data-format="square"] .ce-wrap{width:871px;height:871px;transform:scale(1.24)}
+  #stage[data-format="portrait"] .ce-stage{left:40px;top:127px;width:595px;height:896px}
+  #stage[data-format="square"] .ce-stage{left:52.5px;top:52.5px;width:766px;height:766px}
+  #stage[data-format="portrait"] .ce-page,
+  #stage[data-format="square"] .ce-page{grid-template-columns:minmax(0,1fr)}
+  #stage[data-format="portrait"] .ce-row3,
+  #stage[data-format="square"] .ce-row3{gap:12px}
+  #stage[data-format="portrait"] .ce-row3 .ce-field,
+  #stage[data-format="square"] .ce-row3 .ce-field{flex:1;width:auto;min-width:0}
+  #stage[data-format="portrait"] .ce-canvas{left:16px;top:16px;width:563px;height:620px}
+  #stage[data-format="portrait"] .ce-photo{left:56.5px;top:10px;width:450px;height:600px}
+  #stage[data-format="portrait"] .ce-composer{left:16px;top:652px;width:563px;height:160px}
+  #stage[data-format="portrait"] .ce-presets{flex-wrap:wrap;max-width:400px}
+  #stage[data-format="square"] .ce-canvas{left:16px;top:16px;width:734px;height:520px}
+  #stage[data-format="square"] .ce-photo{left:179.5px;top:10px;width:375px;height:500px}
+  #stage[data-format="square"] .ce-composer{left:16px;top:548px;width:734px;height:128px}
+  #stage[data-format="portrait"] .ce-action,
+  #stage[data-format="square"] .ce-action{bottom:16px;padding:10px 16px;font-size:15px}
+  #stage[data-format="portrait"] .ce-cancel,
+  #stage[data-format="square"] .ce-cancel{left:16px}
+  #stage[data-format="portrait"] .ce-done,
+  #stage[data-format="square"] .ce-done{right:16px}
+  /* the storefront's 3:4 slot, kept whole, with the details hung from its edge */
+  #stage[data-format="portrait"] .ce-site .ef-site-photo{left:87.5px;top:50px;width:420px;height:560px}
+  #stage[data-format="portrait"] .ce-site .ef-site-info{left:87.5px;top:636px;width:420px}
+  #stage[data-format="portrait"] .ce-site .ef-site-title,
+  #stage[data-format="portrait"] .ce-site .ef-site-copy{width:420px}
+  #stage[data-format="square"] .ce-site .ef-site-photo{left:24px;top:50px;width:300px;height:400px}
+  #stage[data-format="square"] .ce-site .ef-site-info{left:352px;width:390px}
+  #stage[data-format="square"] .ce-site .ef-site-title,
+  #stage[data-format="square"] .ce-site .ef-site-tags,
+  #stage[data-format="square"] .ce-site .ef-site-copy{width:390px}
+
+  /* ---- card 6 — the rail stands on end (setupCommerceInfrastructureStacked):
+     chips stacked on the right, the file travelling down beside them, the
+     pair filling the frame. The connectors are the wide rail's own exports
+     turned 90deg, so the line, its clip and the warm-to-yellow all carry
+     over. Geometry (the file is centred on Upload; the lockup on the rail):
+       portrait  chips 400x128, links 260 → rail 904 tall at 548,468
+                 file 360x450 at 132,307; lockup 2x centred on 540,920
+       square    chips 330x92,  links 150 → rail 576 tall at 519,252
+                 file 240x300 at 231,148; lockup 1.6x centred on 540,540 ---- */
+  #stage[data-format="portrait"] .ei-rail,
+  #stage[data-format="square"] .ei-rail{height:auto;flex-direction:column;align-items:stretch}
+  #stage[data-format="portrait"] .ei-rail{left:548px;top:468px;width:400px}
+  #stage[data-format="square"] .ei-rail{left:519px;top:252px;width:330px}
+  #stage[data-format="portrait"] .ei-step,
+  #stage[data-format="square"] .ei-step{padding:0;width:100%}
+  #stage[data-format="portrait"] .ei-step{height:128px;font-size:36px;border-radius:24px}
+  #stage[data-format="square"] .ei-step{height:92px;font-size:30px;border-radius:18px}
+  #stage[data-format="portrait"] .ei-connector,
+  #stage[data-format="square"] .ei-connector{flex:none;width:100%}
+  #stage[data-format="portrait"] .ei-connector{height:260px}
+  #stage[data-format="square"] .ei-connector{height:150px}
+  #stage[data-format="portrait"] .ei-expanded,
+  #stage[data-format="square"] .ei-expanded{inset:auto;left:50%;top:50%;
+    transform:translate(-50%,-50%) rotate(90deg)}
+  #stage[data-format="portrait"] .ei-expanded{width:260px;height:14px}
+  #stage[data-format="square"] .ei-expanded{width:150px;height:12px}
+  #stage[data-format="portrait"] .ei-path-node,
+  #stage[data-format="portrait"] .ei-path-node svg{width:14px;height:14px}
+  #stage[data-format="square"] .ei-path-node,
+  #stage[data-format="square"] .ei-path-node svg{width:12px;height:12px}
+  #stage[data-format="portrait"] .ei-path-line svg{height:2px}
+  #stage[data-format="square"] .ei-path-line svg{height:1.5px}
+  #stage[data-format="portrait"] .ei-collapsed,
+  #stage[data-format="square"] .ei-collapsed{transform:translate(-50%,-50%) rotate(90deg)}
+  #stage[data-format="portrait"] .ei-collapsed,
+  #stage[data-format="portrait"] .ei-collapsed svg{width:119.31px;height:14.65px}
+  #stage[data-format="square"] .ei-collapsed,
+  #stage[data-format="square"] .ei-collapsed svg{width:99.42px;height:12.21px}
+  #stage[data-format="portrait"] .ei-file{left:132px;top:307px;width:360px;height:450px}
+  #stage[data-format="square"] .ei-file{left:231px;top:148px;width:240px;height:300px}
+  #stage[data-format="portrait"] .ei-card,
+  #stage[data-format="portrait"] .ei-photo-wrap{border-radius:32px}
+  #stage[data-format="square"] .ei-card,
+  #stage[data-format="square"] .ei-photo-wrap{border-radius:22px}
+  #stage[data-format="portrait"] .ei-tag{top:16px;padding:8px 18px;border-radius:12px;font-size:34px}
+  #stage[data-format="portrait"] .ei-format{left:16px}
+  #stage[data-format="portrait"] .ei-size{left:126px;min-width:130px}
+  #stage[data-format="square"] .ei-tag{top:12px;padding:6px 14px;border-radius:10px;font-size:28px}
+  #stage[data-format="square"] .ei-format{left:12px}
+  #stage[data-format="square"] .ei-size{left:100px;min-width:106px}
+  #stage[data-format="portrait"] .ei-lockup{left:201px;top:859px;width:678px;height:122px}
+  #stage[data-format="portrait"] .ei-lockup svg{width:678px;height:122px}
+  #stage[data-format="square"] .ei-lockup{left:268.8px;top:491.2px;width:542.4px;height:97.6px}
+  #stage[data-format="square"] .ei-lockup svg{width:542.4px;height:97.6px}
+
+  /* ---- card 7 — the end card as a phone clip: the booth CTA (sign-off and
+     QR) is dropped, and the centre line — logo, "Load faster, sell more.",
+     glyph — is set large on the stage's middle with the four files in the
+     quadrants around it (BOARD_OUTRO_SHAPES). The wireframe turns through
+     90deg in portrait, which hands it the same 42/61px margins on the long
+     axis that it has in landscape; square stretches it to 996x996. ---- */
+  #stage[data-format="portrait"] .hb-outro-sub,
+  #stage[data-format="portrait"] .hb-outro-qr,
+  #stage[data-format="square"] .hb-outro-sub,
+  #stage[data-format="square"] .hb-outro-qr{display:none}
+  #stage[data-format="portrait"] .hb-globe svg{transform:rotate(90deg)}
+  #stage[data-format="square"] .hb-globe svg{transform:scale(.5541,1.0006)}
+  #stage[data-format="portrait"] .hb-sign{left:392px;top:609px;width:296px;height:53px}
+  #stage[data-format="square"] .hb-sign{left:429px;top:323px;width:222px;height:40px}
+  #stage[data-format="portrait"] .hb-outro,
+  #stage[data-format="square"] .hb-outro{left:64px;width:952px}
+  #stage[data-format="portrait"] .hb-outro{top:752px}
+  #stage[data-format="square"] .hb-outro{top:427px}
+  #stage[data-format="portrait"] .hb-outro-line{font-size:112px;letter-spacing:-1.68px}
+  #stage[data-format="square"] .hb-outro-line{font-size:84px;letter-spacing:-1.26px}
+  #stage[data-format="portrait"] .hb-mark{left:475px;top:1061px;width:130px;height:130px}
+  #stage[data-format="portrait"] .hb-mark svg{width:94px;height:94px}
+  #stage[data-format="square"] .hb-mark{left:490px;top:656px;width:100px;height:100px}
+  #stage[data-format="square"] .hb-mark svg{width:72px;height:72px}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-meta{font-size:13px;letter-spacing:.65px}
+  #stage[data-format="square"] .hb-outro-mode .hb-meta{font-size:10.8px;letter-spacing:.54px}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-card{border-radius:30px}
+  #stage[data-format="square"] .hb-outro-mode .hb-card{border-radius:26px}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-cursor{width:7px;height:14px}
+  #stage[data-format="square"] .hb-outro-mode .hb-cursor{width:6px;height:12px}
+  #stage[data-format="portrait"] .hb-outro-mode .hb-led{width:10px;height:10px}
+  #stage[data-format="square"] .hb-outro-mode .hb-led{width:8px;height:8px}
+
+  /* ---- card 5 — the marks fill the frame on their own (ECOM_WALL_SHAPES):
+     one column of six in portrait, two columns of three in square. The
+     "Trusted by" label is an introduction, so the clips drop it ---- */
+  #stage[data-format="portrait"] .el-title,
+  #stage[data-format="square"] .el-title{display:none}
+  #stage[data-format="portrait"] .el-word{font-size:60px}
+  #stage[data-format="square"] .el-word{font-size:46px}
 </style>
 </head>
 <body>
@@ -2355,7 +2634,15 @@ const EMBED = (()=>{
 })();
 if (EMBED){ document.body.classList.add('embed'); stage.dataset.format = EMBED.format; }
 /* Shapes each card type has been recomposed for, beyond its original 16:9. */
-const CARD_FORMATS = {};
+const CARD_FORMATS = {
+  commerceFlow: ['portrait','square'],
+  commerceMetric: ['portrait','square'],
+  commerceBenefits: ['portrait','square'],
+  commerceEditor: ['portrait','square'],
+  commerceLogos: ['portrait','square'],
+  commerceInfrastructure: ['portrait','square'],
+  commerceOutro: ['portrait','square'],
+};
 function fit(){
   const s = Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight);
   stage.style.transform = `scale(${s})`;
@@ -2576,6 +2863,21 @@ const ECOM_WALL = [
   [884, 600, 152, 55],   // Shogun
   [1295, 603, 210, 34],  // Marko
 ];
+/* Portrait stacks the six marks in one column; square hangs them on two
+   columns of three. Each keeps its export proportions and its optical nudge
+   from the frame (how far its centre sits off its own row's), both scaled
+   with it — only the grid they hang on changes. cols are column centres, rows are row centres, in px. */
+const ecomWallRestack = (scale, cols, rows)=>ECOM_WALL.map(([x,y,w,h],i)=>{
+  const row = i<3 ? ECOM_WALL.slice(0,3) : ECOM_WALL.slice(3,6);
+  const mean = row.reduce((a,r)=>a + r[1] + r[3]/2, 0) / row.length;
+  const W = w*scale, H = h*scale;
+  const cx = cols[i % cols.length], cy = rows[Math.floor(i / cols.length)] + (y + h/2 - mean)*scale;
+  return [+(cx - W/2).toFixed(1), +(cy - H/2).toFixed(1), +W.toFixed(1), +H.toFixed(1)];
+});
+const ECOM_WALL_SHAPES = {
+  portrait: ecomWallRestack(2.3,  [540], [400, 605, 810, 1015, 1220, 1425]),
+  square:   ecomWallRestack(1.75, [302, 778], [310, 540, 770]),
+};
 
 /* The tick on the installed button. Drawn here rather than exported because it
    has to be a single open path: the install animation strokes it on, and a
@@ -2642,6 +2944,13 @@ const PD_UUID = '13cf5c14-acb4-4cfe-9add-2d2b155d650c';
    enough the same width that even spacing is what the eye wants. */
 const PD_BADGES = [['soc2',52.0,52.0],['gdpr',52.9,52.9],['hipaa',53.7,46.1]];
 const PD_BADGE_Y = 1015, PD_BADGE_GAP = 99;
+/* Card 2 in portrait and square: the five benefits sit on a two-column grid
+   and the trust marks take its sixth cell. cx/cy is that cell's centre, k the
+   marks' scale and gap their centre-to-centre spacing (see the .eb-row rules). */
+const EB_BADGE_SHAPES = {
+  portrait: { cx:782, cy:1348, k:1.6, gap:140 },
+  square:   { cx:782, cy:852,  k:1.3, gap:116 },
+};
 /* *stars* mark the value half of each readout, which is set in white */
 const PD_ANALYSIS = [
   'image/jpeg \u00b7 290 KB',
@@ -2772,6 +3081,15 @@ const R = {
         </div>
         <div class="eb-icon">${ECOMMERCE[f.icon]}</div>
       </div>`).join('');
+    // portrait and square park the trust marks in the grid's sixth cell
+    const shaped = EB_BADGE_SHAPES[stage.dataset.format];
+    if (shaped){
+      const {cx, cy, k, gap} = shaped, x0 = cx - (PD_BADGES.length-1)*gap/2;
+      const marks = PD_BADGES.map(([name,w,h],i)=>
+        `<div class="eb-badge" style="--i:${i};left:${(x0+i*gap-w*k/2).toFixed(1)}px;`
+        + `top:${(cy-h*k/2).toFixed(1)}px;width:${(w*k).toFixed(1)}px;height:${(h*k).toFixed(1)}px">${COMPLIANCE[name]}</div>`).join('');
+      return `<div class="eb-wrap"><div class="eb-row">${cards}</div>${marks}</div>`;
+    }
     const cx0 = 960 - (PD_BADGES.length-1)*PD_BADGE_GAP/2;
     const badges = PD_BADGES.map(([name,w,h],i)=>
       `<div class="eb-badge" style="--i:${i};left:${cx0+i*PD_BADGE_GAP-w/2}px;`
@@ -2935,8 +3253,9 @@ const R = {
   /* ---- Ecommerce Expo card 5: the six booth-wall customers ---- */
   commerceLogos(s){
     const names = (s.logos||'').split(',').map(n=>n.trim()).filter(Boolean);
+    const wall = ECOM_WALL_SHAPES[stage.dataset.format] || ECOM_WALL;
     const marks = names.map((n,i)=>{
-      const slot = ECOM_WALL[i];
+      const slot = wall[i];
       if (!slot) return '';                       // frame has six slots, no more
       const mark = LOGOS[logoKey(n)];
       const box = `left:${slot[0]}px;top:${slot[1]}px;width:${slot[2]}px;height:${slot[3]}px`;
@@ -3391,7 +3710,8 @@ const R = {
        set is storyboard frame 184:5666 to the pixel — four small files pushed
        into the corners with their telemetry beside them, leaving the whole
        centre line to the lockup, headline, glyph and sign-off. */
-    const G = outro ? {
+    const shaped = outro && BOARD_OUTRO_SHAPES[stage.dataset.format];
+    const G = shaped ? shaped.G : outro ? {
       n1:['left:272px;top:219px',    100, 143, 117.66, 100.66],
       n2:['left:311px;top:778px',    105, 147, 123.88,       0],
       n3:['left:1342.44px;top:203px', 134.27, 94.72, 158.01, 16.38],
@@ -3414,8 +3734,8 @@ const R = {
          <div class="hb-title">${multiline(title)}</div>`;
     /* [class, x, y, size] — the storyboard scatters five, two sizes */
     const dots = outro
-      ? [['y',589,86,4],['g',842,340,7],['y',1019.27,610.05,4],
-         ['g',1167.4,823.73,7],['y',1422,686,4]]
+      ? (shaped ? shaped.dots : [['y',589,86,4],['g',842,340,7],['y',1019.27,610.05,4],
+         ['g',1167.4,823.73,7],['y',1422,686,4]])
         .map(([c,x,y,d])=>`<div class="hb-dot ${c}" style="left:${x}px;top:${y}px;width:${d}px;height:${d}px"></div>`)
         .join('')
       : `<div class="hb-dot g" style="left:16%;top:44%"></div>
@@ -3772,6 +4092,29 @@ function animateLogo(container){
    Each meta block is a list of lines; each line is a list of
    [text, className] segments. Empty line = spacer. The text types
    in character by character with a live cursor. --------------------- */
+/* Card 7 in portrait and square. The centre line (logo, headline, glyph)
+   stacks on the stage's vertical centre and the four files keep their
+   quadrants — top-left, top-right, bottom-left, bottom-right — scaled up
+   (k) so they still read as files on a phone, each with its telemetry to its
+   right as in the frame. Same [position, cardW, cardH, metaLeft, metaTop]
+   shape as the landscape table in R.board, plus the five scattered dots. */
+const BOARD_OUTRO_SHAPES = {
+  portrait: { // k = 1.5
+    G:{ n1:['left:96px;top:250px',   150,   214.5, 176.5, 151],
+        n2:['left:150px;top:1330px', 157.5, 220.5, 185.8, 0],
+        n3:['left:500px;top:240px',  201.4, 142.1, 237,   24.6],
+        n4:['left:740px;top:1300px', 100.5, 124.5, 121.5, 3.1] },
+    dots:[['y',420,560,6],['g',860,640,10],['y',220,1150,6],['g',880,1210,10],['y',600,1560,6]],
+  },
+  square: { // k = 1.2
+    G:{ n1:['left:80px;top:90px',    120,   171.6, 141.2, 120.8],
+        n2:['left:110px;top:800px',  126,   176.4, 148.7, 0],
+        n3:['left:590px;top:80px',   161.1, 113.7, 189.6, 19.7],
+        n4:['left:800px;top:840px',  80.4,  99.6,  97.2,  2.5] },
+    dots:[['y',420,90,5],['g',900,330,8],['y',150,560,5],['g',920,700,8],['y',560,980,5]],
+  },
+};
+
 const BOARD_META = {
   tennis: { lines:[
     [['IMAGE REQUESTED','']],
@@ -4182,7 +4525,14 @@ function setupCommerceFlow(slideEl, sd, tl){
 
   // The file is a drag, so it keeps the Webflow card's spring. The parent owns
   // travel; its child owns the drop scale, preventing transform contention.
-  const FROM = {x:0,y:0}, OVER = {x:235,y:81};
+  // Portrait and square restack the cells, so the landing is measured: the
+  // card comes to rest centred over the drop zone, 33px below its top edge,
+  // which is where the landscape constants put it.
+  const shaped = stage.dataset.format==='portrait' || stage.dataset.format==='square';
+  const FROM = {x:0,y:0}, OVER = shaped ? {
+    x:Math.round(widget.offsetLeft + drop.offsetLeft + (drop.offsetWidth - drag.offsetWidth)/2 - drag.offsetLeft),
+    y:Math.round(widget.offsetTop + drop.offsetTop + 33 - drag.offsetTop)
+  } : {x:235,y:81};
   const FLY = {at:.50,response:.86,bounce:.12};
   tl.to(drag,[{opacity:0},{opacity:1}],{at:.30,dur:.26});
   let landed = 1.55;
@@ -4351,6 +4701,28 @@ function setupCommerceEditor(slideEl, sd, tl){
   const FIELD = {x:860, y:515};                 // parked in the prompt box
   const GEN   = {x:970, y:560};                 // on the composer's send button
   const DONE  = {x:1174, y:612};                // on Add to media
+
+  /* Portrait and square relay the backend and the editor (see their CSS), so
+     the editor seats are measured off the rebuilt UI, at the same fractions of
+     each control the numbers above sit at; the done ring follows its seat. The
+     throw keeps its shape, compressed by half towards the pill so it starts
+     over the page instead of past the edge of a 595px window. The pill seat
+     (REST) and its ring stay put: the Media card is laid out identically. */
+  if (stage.dataset.format==='portrait' || stage.dataset.format==='square'){
+    const root = backend.parentElement;
+    const seat = (el, fx, fy)=>{
+      let x = 0, y = 0, n = el;
+      while (n && n !== root){ x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+      return {x:Math.round(x + el.offsetWidth*fx), y:Math.round(y + el.offsetHeight*fy)};
+    };
+    APPROACH.forEach(p=>{ p.x = Math.round(REST.x + (p.x-REST.x)*.5); });
+    const box = seat(q('.ce-composer'), 1, 0);
+    Object.assign(FIELD, {x:box.x - 140, y:box.y + 49});
+    Object.assign(GEN, seat(generate, .27, .3));
+    Object.assign(DONE, seat(done, .4, .38));
+    doneRing.style.left = `${DONE.x-18}px`;
+    doneRing.style.top = `${DONE.y-18}px`;
+  }
 
   /* A short reach between two seats. Same contract as the long throw: the
      shape is in the waypoints so the effect runs `linear`, the velocity peaks
@@ -4718,6 +5090,9 @@ function setupCommerceInfrastructure(slideEl, sd, tl){
   const expanded = [...slideEl.querySelectorAll('.ei-expanded')];
   const collapsed = [...slideEl.querySelectorAll('.ei-collapsed')];
   if (!file || !photo || !size || !rail || !lockup || steps.length < 3) return;
+  // portrait and square stand the rail on end; same score, other axis
+  if (stage.dataset.format==='portrait' || stage.dataset.format==='square')
+    return setupCommerceInfrastructureStacked(slideEl, tl);
 
   // Measure from layout coordinates only. The stage is CSS-scaled to the
   // viewport; getBoundingClientRect() would return screen pixels and make the
@@ -4889,6 +5264,162 @@ function setupCommerceInfrastructure(slideEl, sd, tl){
         {at:LOGO+.02,dur:.38,ease:EASE.out,fill:'forwards'});
 
   // Keep the final lockup through the outgoing slide crossfade after kill().
+  tl.at(LOGO+.42, ()=>{
+    file.style.opacity='0';
+    rail.style.opacity='0';
+    lockup.style.opacity='1';
+    lockup.style.transform='scale(1)';
+    size.textContent='118KB';
+  });
+}
+
+/* Card 6 in portrait and square. A 989px rail of 11px chips has no legible
+   version at 1080 wide, so the rail stands on end: Upload, Optimize, Deliver
+   stacked down the right, the file travelling down beside them on the left.
+   Every beat and time below is the landscape score's (setupCommerceInfrastructure);
+   only the axis changes. The connectors are the same node/line/node exports
+   turned through 90deg in CSS, so their clip and the collapsed link's slide
+   work in the connector's own (rotated) x, exactly as on the wide rail. When
+   the file has gone, the column contracts onto the stage's centre line —
+   sliding left as it closes up, because beside the file it sat right of
+   centre — and resolves into the lockup centred on that same point. */
+function setupCommerceInfrastructureStacked(slideEl, tl){
+  const file  = slideEl.querySelector('.ei-file');
+  const photo = slideEl.querySelector('.ei-photo');
+  const size  = slideEl.querySelector('.ei-size');
+  const rail  = slideEl.querySelector('.ei-rail');
+  const lockup = slideEl.querySelector('.ei-lockup');
+  const steps = [...slideEl.querySelectorAll('.ei-step')];
+  const expanded = [...slideEl.querySelectorAll('.ei-expanded')];
+  const collapsed = [...slideEl.querySelectorAll('.ei-collapsed')];
+
+  // layout coordinates (offset*), never screen ones: #stage is CSS-scaled
+  const fileCentre = file.offsetTop + file.offsetHeight/2;
+  const centreOf = step => rail.offsetTop + step.offsetTop + step.offsetHeight/2;
+  const atStep = step => Math.round((centreOf(step) - fileCentre)*100)/100;
+  const OPT = atStep(steps[1]);
+  const DELIVER = atStep(steps[2]);
+  // the collapsed link's length along the rail (it is drawn across, then turned)
+  const LINK = parseFloat(getComputedStyle(collapsed[0]).width);
+  const COMPACT_H = steps.reduce((n,s)=>n+s.offsetHeight,0) + 2*LINK;
+  const COMPACT_Y = rail.offsetHeight/2 - COMPACT_H/2;      // rail-relative
+  const SHIFT_X = stage.offsetWidth/2 - (rail.offsetLeft + rail.offsetWidth/2);
+  const K = file.offsetWidth/120;                           // card scale vs 120x150
+
+  const compactDy = (()=>{
+    let run = COMPACT_Y;
+    return steps.map(s=>{
+      const d = run - s.offsetTop;
+      run += s.offsetHeight + LINK;
+      return d;
+    });
+  })();
+  const linkDy = collapsed.map((c,i)=>{
+    const box = c.parentElement;
+    const mid = (steps[i].offsetTop + compactDy[i] + steps[i].offsetHeight
+               + steps[i+1].offsetTop + compactDy[i+1]) / 2;
+    return mid - (box.offsetTop + box.offsetHeight/2);
+  });
+
+  file.style.opacity = '0';
+  file.style.transform = 'translate(0px,10px)';
+  photo.style.transform = 'none';
+  size.textContent = '680KB';
+  size.dataset.working = 'false';
+  rail.style.opacity = '1';
+  rail.style.transform = 'none';
+  rail.dataset.phase = 'travel';
+  steps.forEach(s=>s.style.transform='none');
+  expanded.forEach(e=>Object.assign(e.style,{opacity:'1',clipPath:'inset(0 0 0 0)'}));
+  collapsed.forEach(e=>Object.assign(e.style,{opacity:'0',transform:''}));
+  lockup.style.opacity = '0';
+  lockup.style.transform = 'scale(.94)';
+  steps.forEach(s=>s.dataset.state='idle');
+
+  const countTo = (from, to, ms) => {
+    if (REDUCED){ size.textContent = `${to}KB`; size.dataset.working = 'false'; return; }
+    const started = performance.now();
+    size.dataset.working = 'true';
+    const tick = ()=>{
+      const p = Math.min(1, (performance.now()-started)/ms);
+      const eased = 1-Math.pow(1-p,3);
+      size.textContent = `${Math.round(from+(to-from)*eased)}KB`;
+      if (p < 1) tl.timeout(16, tick);
+      else size.dataset.working = 'false';
+    };
+    tick();
+  };
+
+  // one spring drives every piece of the contraction, as on the wide rail
+  const RAIL_SPRING = {response:.45, bounce:.30};
+  const dMax = Math.max(Math.abs(SHIFT_X), ...compactDy.map(Math.abs)) || 1;
+  const drive = springKeyframes({x:0},{x:dMax}, RAIL_SPRING);
+  const curve = drive.frames.map(([x])=>x/dMax);
+  const railTween = (el, at, value)=>{
+    if (!el) return;
+    if (REDUCED){ tl.at(at, ()=>Object.assign(el.style, value(1))); return; }
+    const kf = curve.map(u=>value(u));
+    tl.at(0, ()=>tl.anim(el.animate(kf,
+      {duration:drive.duration, delay:at*1000, easing:'linear', fill:'forwards'})));
+  };
+
+  const APPEAR=.35, MOVE_OPT=.70, AT_OPT=1.55;
+  const MOVE_DELIVER=2.35, AT_DELIVER=3.20;
+  const CROP=3.32, CROPPED=3.82, FILE_OUT=3.94;
+  const COLLAPSE=4.22, LOGO=COLLAPSE + drive.duration/1000 + .05;
+  tl.at(APPEAR, ()=>steps[0].dataset.state='active');
+  tl.to(file, [{opacity:0,transform:'translate(0px,10px)'},
+               {opacity:1,transform:'translate(0px,0px)'}],
+        {at:APPEAR, dur:.28, fill:'forwards'});
+
+  tl.to(file, [{transform:'translate(0px,0px)'},
+               {transform:`translate(0px,${OPT}px)`}],
+        {at:MOVE_OPT, dur:AT_OPT-MOVE_OPT, ease:EASE.inOut, fill:'forwards'});
+  tl.at(AT_OPT, ()=>{
+    steps[0].dataset.state='done';
+    steps[1].dataset.state='active';
+    countTo(680,118,700);
+  });
+
+  tl.to(file, [{transform:`translate(0px,${OPT}px)`},
+               {transform:`translate(0px,${DELIVER}px)`}],
+        {at:MOVE_DELIVER, dur:AT_DELIVER-MOVE_DELIVER, ease:EASE.inOut, fill:'forwards'});
+  tl.at(AT_DELIVER, ()=>{
+    steps[1].dataset.state='done';
+    steps[2].dataset.state='active';
+  });
+
+  // the same centred cover crop, in the larger card's pixels
+  tl.to(photo, [{transform:'translate(0px,0px) scale(1)'},
+                {transform:`translate(${(10.84*K).toFixed(2)}px,${(-5*K).toFixed(2)}px) scale(.847)`}],
+        {at:CROP, dur:CROPPED-CROP, ease:EASE.inOut, fill:'forwards'});
+
+  tl.to(file, [{opacity:1,transform:`translate(0px,${DELIVER}px)`},
+               {opacity:0,transform:`translate(0px,${DELIVER-6}px)`}],
+        {at:FILE_OUT, dur:.28, ease:EASE.out, fill:'forwards'});
+
+  tl.at(COLLAPSE, ()=>{ rail.dataset.phase='collapse'; });
+  railTween(rail, COLLAPSE, u=>({transform:`translateX(${(SHIFT_X*u).toFixed(2)}px)`}));
+  steps.forEach((s,i)=>railTween(s, COLLAPSE,
+        u=>({transform:`translateY(${(compactDy[i]*u).toFixed(2)}px)`})));
+  collapsed.forEach((c,i)=>railTween(c, COLLAPSE,
+        u=>({transform:`translate(-50%,-50%) translateY(${(linkDy[i]*u).toFixed(2)}px) rotate(90deg)`})));
+  // turned 90deg clockwise, the connector's own left edge is its top
+  expanded.forEach((e,i)=>railTween(e, COLLAPSE, u=>({
+    clipPath:`inset(0 ${Math.max(0,-compactDy[i+1]*u).toFixed(2)}px 0 `
+           + `${Math.max(0,compactDy[i]*u).toFixed(2)}px)`
+  })));
+  expanded.forEach(e=>tl.to(e,[{opacity:1},{opacity:0}],
+        {at:COLLAPSE+.18,dur:.42,fill:'forwards'}));
+  collapsed.forEach(e=>tl.to(e,[{opacity:0},{opacity:1}],
+        {at:COLLAPSE+.18,dur:.42,fill:'forwards'}));
+
+  tl.to(rail,[{opacity:1},{opacity:0}],
+        {at:LOGO,dur:.30,ease:EASE.out,fill:'forwards'});
+  tl.to(lockup,[{opacity:0,transform:'scale(.94)'},
+                {opacity:1,transform:'scale(1)'}],
+        {at:LOGO+.02,dur:.38,ease:EASE.out,fill:'forwards'});
+
   tl.at(LOGO+.42, ()=>{
     file.style.opacity='0';
     rail.style.opacity='0';
