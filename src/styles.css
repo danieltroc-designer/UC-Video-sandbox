@@ -619,8 +619,9 @@ body.mode-library #snapshot { display: none !important; }
 
 .lib-formats button { height: auto; padding: 6px 0; display: grid; gap: 1px; }
 .lib-formats small { font-size: 10.5px; color: var(--faint); }
-.lib-formats button.is-pending span { opacity: 0.55; }
-.lib-formats button.is-pending small::after { content: ' · soon'; }
+.lib-formats button.is-off span { opacity: 0.55; }
+.lib-card.is-off b, .lib-card.is-off small { opacity: 0.5; }
+.lib-shapes { font-style: normal; font-size: 10.5px; color: var(--faint); }
 
 .lib-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lib-actions .btn:disabled { opacity: 0.4; cursor: not-allowed; }

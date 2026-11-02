@@ -27,7 +27,8 @@ import { installClock } from './clock.js';
 import { serve } from '../server.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const DECKS = ['ecommerce-expo', 'webflow-booth'];
+// a deck is any library/<name>/ folder with a built deck.html (checked per call, so a new deck needs no restart)
+export const isDeck = (name) => /^[a-z0-9-]+$/.test(name) && existsSync(join(ROOT, 'library', name, 'deck.html'));
 export const FORMATS = { landscape: [1920, 1080], portrait: [1080, 1920], square: [1080, 1080] };
 
 /** Newest headless Chrome already on this machine (Puppeteer or Playwright cache). */
@@ -69,9 +70,9 @@ const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]
  */
 export async function renderCard({
   deck, card, format = 'landscape', fps = 30, scale = 1, out = join(homedir(), 'Downloads'),
-  baseUrl, browser: sharedBrowser, onProgress = () => {}, onStatus = () => {}, signal, stills,
+  baseUrl, browser: sharedBrowser, onProgress = () => {}, onStatus = () => {}, signal, stills, camera = false,
 }) {
-  if (!DECKS.includes(deck)) throw new Error(`Unknown deck "${deck}"`);
+  if (!isDeck(deck)) throw new Error(`Unknown deck "${deck}"`);
   if (!FORMATS[format]) throw new Error(`Unknown format "${format}"`);
   const width = FORMATS[format][0] * scale;
   const height = FORMATS[format][1] * scale;
@@ -85,24 +86,34 @@ export async function renderCard({
     onStatus('Loading card');
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.evaluateOnNewDocument(installClock, 1);
-    await page.goto(`${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold`, { waitUntil: 'load' });
+    // camera: the card plays in its 16:9 layout inside library/camera.html, filmed in perspective
+    const url = camera
+      ? `${baseUrl}/library/camera.html?deck=${deck}&card=${card}&format=${format}&hold`
+      : `${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold`;
+    await page.goto(url, { waitUntil: 'load' });
+    if (camera) await page.waitForFunction(() => window.__cameraReady, { timeout: 20000 });
     const info = await page.evaluate((i) => window.__deckInfo()[i], card);
     if (!info) throw new Error(`${deck} has no card ${card + 1}`);
+    // the camera films the card's 16:9 layout, whatever shape the film is
+    const needs = camera ? 'landscape' : format;
+    if (!info.formats.includes(needs)) throw new Error(`${info.label} has no ${needs} layout${camera ? ' to film' : ''}`);
 
     // Build the card with the clock still at 0, and let its images arrive
     // before the first frame — time doesn't move while we wait.
     await page.evaluate(() => document.fonts.ready.then(() => window.__deckStart()));
     await page.waitForNetworkIdle({ idleTime: 300, timeout: 20000 }).catch(() => {});
-    await page.evaluate(async () => {
-      await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
-      await document.fonts.ready;
-    });
+    for (const f of page.frames()) {
+      await f.evaluate(async () => {
+        await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
+        await document.fonts.ready;
+      }).catch(() => {});
+    }
 
     await enc.goto(`${baseUrl}/render/encoder.html`, { waitUntil: 'load' });
     await enc.waitForFunction(() => window.encoderReady);
 
-    if (stills) return await contactSheet({ page, enc, deck, card, format, info, stills, out, width, height });
-    const method = await enc.evaluate((o) => window.startEncoder(o), { width, height, fps });
+    if (stills) return await contactSheet({ page, enc, deck, card, format, info, stills, out, width, height, camera });
+    const method = await enc.evaluate((o) => window.startEncoder(o), { width, height, fps, bitsPerPixel: camera ? 0.38 : 0.18 });
 
     const frames = Math.max(1, Math.round(info.duration * fps));
     const cdp = await page.createCDPSession();
@@ -110,7 +121,7 @@ export async function renderCard({
     onStatus(`Rendering ${frames} frames`);
     for (let i = 0; i < frames; i++) {
       if (signal?.aborted) throw new Error('Render cancelled');
-      await page.evaluate((t) => window.__vt.advance(t - window.__vt.now), (i * 1000) / fps);
+      await advance(page, (i * 1000) / fps);
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
       // Capture the next frame while this one encodes (the tab encodes in order).
       inflight.push(enc.evaluate((b64, idx) => window.encodeFrame(b64, idx), data, i));
@@ -121,7 +132,7 @@ export async function renderCard({
     onStatus('Finishing MP4');
     const bytes = Buffer.from(await enc.evaluate((n) => window.finishEncoder(n), frames), 'base64');
 
-    const name = `uc-${deck}-${String(card + 1).padStart(2, '0')}-${slug(info.label.replace(/^Expo · /, ''))}-${width}x${height}.mp4`;
+    const name = `uc-${deck}-${String(card + 1).padStart(2, '0')}-${slug(info.label.replace(/^Expo · /, ''))}${camera ? '-camera' : ''}-${width}x${height}.mp4`;
     mkdirSync(out, { recursive: true });
     const file = join(out, name);
     writeFileSync(file, bytes);
@@ -134,11 +145,18 @@ export async function renderCard({
   }
 }
 
+/** Moves every frame's clock (the deck, and the camera page around it) to `ms`. */
+async function advance(page, ms) {
+  for (const f of page.frames()) {
+    await f.evaluate((t) => window.__vt && window.__vt.advance(t - window.__vt.now), ms).catch(() => {});
+  }
+}
+
 /** Renders `stills` (seconds) and tiles them into one labelled PNG. */
-async function contactSheet({ page, enc, deck, card, format, info, stills, out, width, height }) {
+async function contactSheet({ page, enc, deck, card, format, info, stills, out, width, height, camera }) {
   const shots = [];
   for (const t of stills) {
-    await page.evaluate((ms) => window.__vt.advance(ms - window.__vt.now), Math.max(0, t * 1000));
+    await advance(page, Math.max(0, t * 1000));
     shots.push((await page.screenshot({ type: 'png', encoding: 'base64' })));
   }
   const cols = format === 'portrait' ? Math.min(5, stills.length) : format === 'square' ? Math.min(4, stills.length) : Math.min(3, stills.length);
@@ -163,7 +181,7 @@ async function contactSheet({ page, enc, deck, card, format, info, stills, out, 
     return c.toDataURL('image/png').split(',')[1];
   }, { shots, stills, cols, width, height });
   mkdirSync(out, { recursive: true });
-  const file = join(out, `sheet-${deck}-${String(card + 1).padStart(2, '0')}-${format}.png`);
+  const file = join(out, `sheet-${deck}-${String(card + 1).padStart(2, '0')}-${format}${camera ? '-camera' : ''}.png`);
   writeFileSync(file, Buffer.from(png, 'base64'));
   return { file, name: file.split('/').pop(), card: info };
 }
@@ -175,6 +193,7 @@ async function cli(argv) {
   for (let i = 0; i < argv.length; i++) {
     const [k, v] = [argv[i].replace(/^--/, ''), argv[i + 1]];
     if (k === 'all') opt.all = true;
+    else if (k === 'camera') opt.camera = true;
     else { opt[k] = v; i++; }
   }
   if (!opt.deck) throw new Error('Usage: node render/render.mjs --deck <deck> (--card N | --all) [--format landscape|portrait|square|all] [--fps 30] [--scale 1|2] [--out dir]');
@@ -183,20 +202,21 @@ async function cli(argv) {
   const baseUrl = `http://localhost:${server.address().port}`;
   const browser = await launch();
   try {
-    let cards;
-    if (opt.all) {
-      const page = await browser.newPage();
-      await page.goto(`${baseUrl}/library/${opt.deck}/deck.html?card=0&hold`);
-      cards = (await page.evaluate(() => window.__deckInfo())).map((c) => c.index);
-      await page.close();
-    } else cards = [Number(opt.card) - 1];
+    const page = await browser.newPage();
+    await page.goto(`${baseUrl}/library/${opt.deck}/deck.html?card=0&hold`);
+    const info = await page.evaluate(() => window.__deckInfo());
+    await page.close();
+    const cards = opt.all ? info.map((c) => c.index) : [Number(opt.card) - 1];
     for (const card of cards) for (const format of formats) {
+      // --format all: only the shapes this card has
+      const has = info[card]?.formats.includes(opt.camera ? 'landscape' : format);
+      if (formats.length > 1 && !has) continue;
       const t0 = Date.now();
       let last = -1;
       const stills = opt.stills ? String(opt.stills).split(',').map(Number) : undefined;
       const r = await renderCard({
         deck: opt.deck, card, format, fps: Number(opt.fps), scale: Number(opt.scale), out: resolve(opt.out),
-        baseUrl, browser, stills,
+        baseUrl, browser, stills, camera: !!opt.camera,
         onProgress: (p) => { const pct = Math.floor(p * 10); if (pct !== last) { last = pct; process.stdout.write(`\r  card ${card + 1} ${format}: ${pct * 10}%`); } },
       });
       if (stills) { console.log(`  ${r.file}`); continue; }

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library camera</title>
+<!--
+  "Filmed screen" shots for the Library. A card plays in its original 16:9
+  layout on a screen inside a 3D scene, and a virtual camera films it at an
+  angle: hard cuts to each beat of the action, a very slow drift within each
+  cut, a faint handheld sway, shallow depth of field and film grain. The output
+  frame can be any shape, which is what turns a wide booth card into a vertical
+  close-up.
+
+    camera.html?deck=ecommerce-expo&card=0&format=portrait[&shot=name][&hold]
+
+  Time comes from performance.now(), so the renderer's virtual clock drives the
+  camera exactly like it drives the deck in the iframe. The film is laid out at
+  its export size (1080×1920 for portrait) and scaled to the window, so the
+  framing is the same in the studio's small preview and in a 4K render.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #070707; overflow: hidden; }
+  #frame {
+    position: fixed; inset: 0; overflow: hidden;
+    background: #070707;
+  }
+  /* The screen and its depth of field, at export size, scaled to the window
+     (fitFilm). The lens is a backdrop root (opacity below 1), so the blur only
+     ever sees the screen: blurring the dithered backdrop as well would smooth
+     the dither away and bring the bands back. */
+  #lens {
+    position: absolute; left: 50%; top: 50%;
+    perspective: 1600px;
+    opacity: 0.999;
+  }
+  /* backdrop, vignette and grain are canvases drawn with dithering (see paint()) */
+  #backdrop, #vignette, #grain {
+    position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none;
+  }
+  #rig {
+    position: absolute; left: 50%; top: 50%;
+    width: 1920px; height: 1080px;
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  #screen {
+    display: block; width: 1920px; height: 1080px; border: 0;
+    border-radius: 22px;
+    background: #090909;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+  /* glass: a faint sheen across the screen that shifts as the camera moves */
+  #sheen {
+    position: absolute; inset: 0; border-radius: 22px; pointer-events: none;
+    background: linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.045) 48%, rgba(255,255,255,0) 62%);
+    background-size: 250% 100%;
+    mix-blend-mode: screen;
+  }
+  /* shallow depth of field: the screen blurs except a soft area around the focus */
+  #dof {
+    position: absolute; inset: 0; pointer-events: none;
+    backdrop-filter: blur(var(--dof, 7px));
+    -webkit-mask-image: radial-gradient(ellipse 62% 46% at 50% 50%, transparent 0%, transparent 38%, #000 100%);
+            mask-image: radial-gradient(ellipse 62% 46% at 50% 50%, transparent 0%, transparent 38%, #000 100%);
+  }
+</style>
+</head>
+<body>
+<div id="frame">
+  <canvas id="backdrop"></canvas>
+  <div id="lens"><div id="rig"><iframe id="screen" scrolling="no" tabindex="-1"></iframe><div id="sheen"></div></div><div id="dof"></div></div>
+</div>
+<canvas id="vignette"></canvas>
+<canvas id="grain"></canvas>
+<script type="module">
+  import { shotFor } from './shots.js';
+
+  const q = new URLSearchParams(location.search);
+  const deck = q.get('deck') || 'ecommerce-expo';
+  const card = Math.max(0, parseInt(q.get('card'), 10) || 0);
+  const hold = q.has('hold');
+  const format = q.get('format') || 'portrait';
+  const [filmW, filmH] = { portrait: [1080, 1920], square: [1080, 1080], landscape: [1920, 1080] }[format] ?? [1080, 1920];
+  const lens = document.getElementById('lens');
+  const screen = document.getElementById('screen');
+  const rig = document.getElementById('rig');
+  const sheen = document.getElementById('sheen');
+
+  // The card plays in its original landscape layout; the camera does the framing.
+  screen.src = `${deck}/deck.html?card=${card}&format=landscape${hold ? '&hold' : ''}`;
+
+  let shot = null;
+  let t0 = null;
+
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  // Camera at time t: the cut playing at t, drifting at a constant, very slow
+  // pace from its `from` to its `to` (a slider dolly, not an ease), plus sway.
+  function cameraAt(t) {
+    const cuts = shot.cuts;
+    let i = 0;
+    while (i < cuts.length - 1 && t >= cuts[i + 1].t) i++;
+    const cut = cuts[i];
+    const end = cuts[i + 1]?.t ?? shot.duration;
+    const k = Math.min(1, Math.max(0, (t - cut.t) / (end - cut.t)));
+    const c = {};
+    for (const p of ['x', 'y', 'zoom', 'rx', 'ry', 'rz']) c[p] = lerp(cut.from[p], cut.to[p], k);
+    // handheld: a few slow, incommensurate sines — alive, never jittery
+    const s = shot.sway ?? 1;
+    c.x += s * (2.5 * Math.sin(t * 0.37) + 1.2 * Math.sin(t * 0.83 + 1.1));
+    c.y += s * (2 * Math.sin(t * 0.29 + 0.4) + 1 * Math.sin(t * 0.71 + 2.3));
+    c.rx += s * 0.12 * Math.sin(t * 0.31 + 0.7);
+    c.ry += s * 0.15 * Math.sin(t * 0.23 + 1.9);
+    c.rz += s * 0.06 * Math.sin(t * 0.19 + 0.2);
+    return c;
+  }
+
+  // Dark gradients only have a handful of 8-bit shades, so drawn by CSS they
+  // band into visible rings, and H.264 turns the rings into blocks. The backdrop
+  // and vignette are drawn by hand with dithering instead, and a fine film grain
+  // over everything keeps the encoder from flattening them again.
+  const tri = () => Math.random() - Math.random(); // triangular noise in ±1
+  function paint(canvas, shade) {
+    const w = (canvas.width = Math.round(innerWidth * devicePixelRatio));
+    const h = (canvas.height = Math.round(innerHeight * devicePixelRatio));
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const px = img.data;
+    for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i += 4) shade(px, i, x / w, y / h);
+    ctx.putImageData(img, 0, 0);
+  }
+  const clamp8 = (v) => Math.max(0, Math.min(255, Math.round(v)));
+  function paintBackdrop() {
+    // the old CSS: radial-gradient(120% 90% at 50% 45%, #121214 0%, #070707 70%)
+    paint(document.getElementById('backdrop'), (px, i, u, v) => {
+      const k = Math.min(1, Math.hypot((u - 0.5) / 1.2, (v - 0.45) / 0.9) / 0.7);
+      const n = tri();
+      px[i] = clamp8(lerp(18, 7, k) + n);
+      px[i + 1] = clamp8(lerp(18, 7, k) + n);
+      px[i + 2] = clamp8(lerp(20, 7, k) + n);
+      px[i + 3] = 255;
+    });
+    // black, clear in the middle, 55% at the edges
+    paint(document.getElementById('vignette'), (px, i, u, v) => {
+      const r = Math.hypot((u - 0.5) / 0.8, (v - 0.5) / 0.7);
+      px[i + 3] = clamp8(Math.min(1, Math.max(0, (r - 0.55) / 0.45)) * 0.55 * 255 + tri());
+    });
+  }
+
+  // Grain: a few tiles of noise, a new tile at a new offset every frame.
+  const grain = document.getElementById('grain');
+  const gctx = grain.getContext('2d');
+  const grainTiles = Array.from({ length: 4 }, () => {
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 256;
+    const tctx = tile.getContext('2d');
+    const img = tctx.createImageData(256, 256);
+    for (let i = 0; i < img.data.length; i += 4) {
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = clamp8(128 + 127 * tri());
+      img.data[i + 3] = 11; // ~4%: about ±2 shades in the shadows
+    }
+    tctx.putImageData(img, 0, 0);
+    return gctx.createPattern(tile, 'repeat');
+  });
+  let grainFrame = 0;
+  function drawGrain() {
+    if (grain.width !== Math.round(innerWidth * devicePixelRatio)) {
+      grain.width = Math.round(innerWidth * devicePixelRatio);
+      grain.height = Math.round(innerHeight * devicePixelRatio);
+    }
+    const ox = Math.floor(Math.random() * 256), oy = Math.floor(Math.random() * 256);
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
+    gctx.clearRect(0, 0, grain.width, grain.height);
+    gctx.setTransform(1, 0, 0, 1, -ox, -oy);
+    gctx.fillStyle = grainTiles[grainFrame++ % grainTiles.length];
+    gctx.fillRect(ox, oy, grain.width, grain.height);
+  }
+
+  function place(t) {
+    const c = cameraAt(t);
+    // Focus point to the frame centre, then zoom and tilt around it.
+    rig.style.transformOrigin = `${c.x}px ${c.y}px`;
+    rig.style.transform =
+      `translate(${-c.x}px, ${-c.y}px) scale(${c.zoom}) rotateX(${c.rx}deg) rotateY(${c.ry}deg) rotateZ(${c.rz}deg)`;
+    sheen.style.backgroundPosition = `${50 + c.ry * 4 + c.x / 60}% 0`;
+  }
+
+  function frame(now) {
+    if (shot) place(t0 == null ? 0 : (now - t0) / 1000);
+    drawGrain();
+    requestAnimationFrame(frame);
+  }
+
+  // With &hold the renderer starts the clock (and the deck); otherwise the deck
+  // starts itself as it loads, and the camera starts with it.
+  function start() {
+    if (hold) screen.contentWindow.__deckStart?.();
+    t0 = performance.now();
+  }
+
+  function fitFilm() {
+    const k = Math.min(innerWidth / filmW, innerHeight / filmH);
+    lens.style.width = `${filmW}px`;
+    lens.style.height = `${filmH}px`;
+    lens.style.transform = `translate(-50%, -50%) scale(${k})`;
+  }
+
+  fitFilm();
+  paintBackdrop();
+  addEventListener('resize', () => { fitFilm(); paintBackdrop(); });
+
+  window.__deckInfo = () => screen.contentWindow.__deckInfo();
+  window.__deckStart = start;
+  // the studio loops the preview with this; a different card means a different shot, so it reloads instead
+  window.__deckRestart = () => { screen.contentWindow.__deckRestart?.(card); t0 = performance.now(); };
+
+  screen.addEventListener('load', () => {
+    const info = screen.contentWindow.__deckInfo()[card];
+    shot = shotFor(deck, card, info, format, q.get('shot'));
+    // Camera shots are about the motion: no headings, plus anything the shot hides.
+    const style = screen.contentDocument.createElement('style');
+    style.textContent = `${['.shd', ...(shot.hide || [])].join(', ')} { visibility: hidden !important; }`;
+    screen.contentDocument.head.append(style);
+    document.getElementById('dof').style.setProperty('--dof', `${shot.dof ?? 7}px`);
+    place(0);
+    window.__cameraReady = true;
+    if (!hold) start();
+  });
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>

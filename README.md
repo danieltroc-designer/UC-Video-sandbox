@@ -27,6 +27,7 @@ The deployed site is static (`vercel.json`): everything but Library export works
 | `src/export.js` | WebCodecs + mp4-muxer export, MediaRecorder fallback |
 | `src/library.js` | Library mode: deck/card picker, live preview, export through the local API |
 | `library/` | The vendored booth decks and their build (`python3 library/build.py`) |
+| `library/camera.html`, `library/shots.js` | The Library's Camera look: a card filmed on an angled screen, and each card's shots |
 | `render/` | Frame-exact headless-Chrome renderer for Library cards (`npm run render`), its local API and regression check |
 | `server.mjs` | Static server; run directly it also serves the render API |
 | `assets/` | Backgrounds and logo |

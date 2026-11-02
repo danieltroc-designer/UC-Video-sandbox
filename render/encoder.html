@@ -12,9 +12,10 @@
 
   window.encoderReady = true;
 
-  window.startEncoder = async ({ width, height, fps: rate }) => {
+  // bitsPerPixel: camera shots carry film grain, which needs about twice the bits
+  window.startEncoder = async ({ width, height, fps: rate, bitsPerPixel = 0.18 }) => {
     fps = rate;
-    const bitrate = Math.round(Math.min(80e6, Math.max(10e6, width * height * fps * 0.18)));
+    const bitrate = Math.round(Math.min(80e6, Math.max(10e6, width * height * fps * bitsPerPixel)));
     let config = null;
     for (const c of candidates(width, height, fps, bitrate)) {
       if (await isSupported(c)) { config = c; break; }

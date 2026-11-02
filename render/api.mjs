@@ -4,7 +4,7 @@
  * shows how to export locally instead).
  *
  *   GET  /api/health              -> { render: true, chrome }
- *   POST /api/render  {deck, card, format, fps, scale}  -> { id }
+ *   POST /api/render  {deck, card, format, fps, scale, camera}  -> { id }
  *   GET  /api/render/:id          -> { state, progress, status, result | error }
  *   GET  /api/render/:id/file     -> the MP4 (also saved to ~/Downloads)
  *   DELETE /api/render/:id        -> cancel
@@ -15,7 +15,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { DECKS, FORMATS, findChrome, launch, renderCard } from './render.mjs';
+import { FORMATS, findChrome, isDeck, launch, renderCard } from './render.mjs';
 
 const OUT = join(homedir(), 'Downloads');
 const jobs = new Map();
@@ -75,8 +75,9 @@ export async function handle(req, res, { baseUrl }) {
       format: String(body.format || 'landscape'),
       fps: [24, 25, 30, 50, 60].includes(Number(body.fps)) ? Number(body.fps) : 30,
       scale: Number(body.scale) === 2 ? 2 : 1,
+      camera: body.camera === true,
     };
-    if (!DECKS.includes(request.deck) || !FORMATS[request.format] || !(request.card >= 0)) {
+    if (!isDeck(request.deck) || !FORMATS[request.format] || !(request.card >= 0)) {
       return json(res, 400, { error: 'Unknown deck, card or format' });
     }
     const job = { id: randomUUID(), request, state: 'queued', progress: 0, status: 'Queued', controller: new AbortController() };

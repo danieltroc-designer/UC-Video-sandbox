@@ -12,6 +12,14 @@ Each folder is a vendored copy of the deck's build inputs (`build.py`, `build_si
 - **Embed mode** (added by `patch_embed.py`): `deck.html?card=N&format=landscape|portrait|square` plays one card with no auto-advance and no kiosk chrome; `&hold` waits for `window.__deckStart()` so the renderer can start the clock. `window.__deckInfo()` lists the cards.
 - **Portrait and square layouts**: scoped under `#stage[data-format="portrait"|"square"]`; a card lists the shapes it has been recomposed for in `CARD_FORMATS`. The 16:9 cards stay identical to the source decks.
 
+## Camera
+
+The **Camera** look (Library → Look) films a card's 16:9 layout on an angled screen instead of recomposing it: `camera.html?deck=…&card=N&format=…` plays the card in an iframe inside a 3D scene and cuts between slow-drifting camera angles, with depth of field and film grain. Works in any output shape.
+
+- Shots live in `shots.js`: per card, a list of cuts (`t`, `from`, `to`) in the card's 1920×1080 space. Cards without one get a single slow push-in.
+- The backdrop and vignette are drawn with dithering and the grain is applied on top, because dark CSS gradients band visibly once encoded. Camera renders also get about twice the bitrate.
+- From the terminal: `npm run render -- --deck ecommerce-expo --card 1 --format portrait --camera`.
+
 ## Build
 
 ```bash

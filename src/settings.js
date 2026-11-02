@@ -40,6 +40,7 @@ export const DEFAULTS = {
   libCard: 0,
   libFormat: 'landscape',
   libScale: 1,
+  libCamera: false, // film the card's 16:9 layout on an angled screen (library/camera.html)
 
   // Content
   title: 'The infrastructure\nbehind every file',
