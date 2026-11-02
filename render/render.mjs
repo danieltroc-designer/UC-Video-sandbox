@@ -102,6 +102,8 @@ export async function renderCard({
       ? `${baseUrl}/library/camera.html?deck=${deck}&card=${card}&format=${format}&hold${extra}`
       : `${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold${extra}`;
     await page.goto(url(), { waitUntil: 'load' });
+    // the camera hands on its screen's card list, which can come in after its own load
+    await page.waitForFunction(() => window.__deckInfo?.(), { timeout: 20000 });
     // by label: look it up in the deck as loaded (its card list may have changed since the caller looked)
     const found = label && await page.evaluate((l) => window.__deckInfo().findIndex((c) => c.label.toLowerCase().includes(l)), label.toLowerCase());
     if (label && found < 0) throw new Error(`No card labelled "${label}" in ${deck}`);

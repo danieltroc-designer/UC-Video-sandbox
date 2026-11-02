@@ -173,11 +173,22 @@ export function createLibrary({ state, persist, modal }) {
     fit();
   }
 
-  frame.addEventListener('load', () => {
+  // The camera look hands on its screen's info, and the screen can finish loading after the camera page does (Safari)
+  async function deckInfo(w) {
+    for (let i = 0; i < 200 && frame.contentWindow === w; i++) {
+      const info = w.__deckInfo?.();
+      if (info) return info;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('the deck never said what cards it has');
+  }
+
+  frame.addEventListener('load', async () => {
     if (!active) return; // unloaded on the way out
     const w = frame.contentWindow;
     try {
-      cards = w.__deckInfo();
+      cards = await deckInfo(w);
+      if (frame.contentWindow !== w) return; // replaced while waiting
       if (!cards[at.card]) { at.card = 0; persist(); }
       if (!has(cards[at.card], at.format)) { at.format = cards[at.card].formats[0]; persist(); }
       renderList();

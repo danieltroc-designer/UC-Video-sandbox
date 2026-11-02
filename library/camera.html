@@ -210,7 +210,7 @@
   paintBackdrop();
   addEventListener('resize', () => { fitFilm(); paintBackdrop(); });
 
-  window.__deckInfo = () => screen.contentWindow.__deckInfo();
+  window.__deckInfo = () => screen.contentWindow?.__deckInfo?.();
   window.__deckStart = start;
   // the studio loops the preview with this; a different card means a different shot, so it reloads instead
   window.__deckRestart = () => { screen.contentWindow.__deckRestart?.(card); t0 = performance.now(); };
