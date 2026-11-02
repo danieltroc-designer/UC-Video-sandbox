@@ -103,7 +103,20 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onFile
       const buttons = c.options.map(([value, label]) =>
         el('button', { type: 'button', text: label, onclick: () => set(c.key, value) }));
       syncers.push(() => buttons.forEach((b, i) => b.classList.toggle('is-active', c.options[i][0] === state[c.key])));
-      return el('div', { class: 'field' }, [head(c), el('div', { class: 'segmented' }, buttons)]);
+      return el('div', { class: 'field' }, [
+        head(c),
+        el('div', { class: 'segmented' }, buttons),
+        c.hint && el('p', { class: 'hint', text: c.hint }),
+      ]);
+    },
+
+    // A grid of picture buttons; `icon(value)` draws each picture.
+    tiles(c) {
+      const buttons = c.options.map(([value, label]) =>
+        el('button', { type: 'button', class: 'tile', title: label, onclick: () => set(c.key, value) },
+          [c.icon?.(value), el('span', { text: label })]));
+      syncers.push(() => buttons.forEach((b, i) => b.classList.toggle('is-active', c.options[i][0] === state[c.key])));
+      return el('div', { class: 'field' }, [head(c), el('div', { class: 'tiles' }, buttons)]);
     },
 
     select(c) {

@@ -1,3 +1,5 @@
+import { REACTIONS, ENTRANCES, EXITS, mascotIcon } from './mascot.js';
+
 export const FORMATS = {
   '1920x1080': { label: '16:9 · 1080p', w: 1920, h: 1080 },
   '3840x2160': { label: '16:9 · 4K', w: 3840, h: 2160 },
@@ -13,8 +15,25 @@ export const DEFAULTS = {
   format: '1920x1080',
   fps: 60,
 
-  // Intro, outro or library (switched in the top bar)
+  // Intro, outro, mascot or library (switched in the top bar)
   mode: 'intro',
+
+  // Mascot: the pixel character from uploadcare.com, one reaction per clip.
+  // It keeps its own format, square unless changed.
+  mascotFormat: '1080x1080',
+  mascotReaction: 'wave',
+  mascotCaption: 'Hello!',
+  showCaption: false,
+  mascotFlip: false,
+  mascotEntrance: 'jump',
+  mascotExit: 'none',
+  mascotLength: 4,
+  mascotSpeed: 1,
+  mascotBackground: 'black',
+  mascotColor: '#ffcf3e',
+  mascotBgColor: '#ffffff',
+  mascotSize: 1,
+  mascotPlace: 'bottom',
 
   // Library: booth-deck cards, previewed live and rendered by the local renderer
   libDeck: 'ecommerce-expo',
@@ -151,11 +170,52 @@ export const TRACKS = {
 // Keys that belong to a background's look.
 export const LOOK_KEYS = Object.keys(BACKGROUNDS.streaks.look);
 
+const titles = (s) => s.mode !== 'mascot';
+
 // Sidebar schema. `toggle` puts an on/off switch in the field header.
 export const SECTIONS = [
   {
+    id: 'mascot',
+    title: 'Mascot',
+    when: (s) => s.mode === 'mascot',
+    controls: [
+      { key: 'mascotReaction', type: 'tiles', label: 'Reaction', icon: mascotIcon,
+        options: Object.entries(REACTIONS).map(([id, r]) => [id, r.label]) },
+      { key: 'mascotCaption', type: 'text', label: 'Caption', toggle: 'showCaption',
+        hint: 'A pixel speech bubble, one line. Letters, numbers and ! ? . , - + : / & # @ % ♥' },
+      { key: 'mascotFlip', type: 'switch', label: 'Face right' },
+    ],
+  },
+  {
+    id: 'mascotMotion',
+    title: 'Motion',
+    when: (s) => s.mode === 'mascot',
+    controls: [
+      { key: 'mascotEntrance', type: 'segmented', label: 'Entrance', options: Object.entries(ENTRANCES) },
+      { key: 'mascotExit', type: 'segmented', label: 'Exit', options: Object.entries(EXITS) },
+      { key: 'mascotLength', type: 'range', label: 'Length', min: 1, max: 15, step: 0.5, unit: 's',
+        hint: 'Rounded to a whole number of loops, so the clip repeats without a jump.' },
+      { key: 'mascotSpeed', type: 'range', label: 'Speed', min: 0.5, max: 2, step: 0.05, unit: '×' },
+    ],
+  },
+  {
+    id: 'mascotLook',
+    title: 'Look',
+    when: (s) => s.mode === 'mascot',
+    controls: [
+      { key: 'mascotBackground', type: 'segmented', label: 'Background',
+        options: [['black', 'Black'], ['inverted', 'Inverted'], ['green', 'Green'], ['custom', 'Custom']],
+        hint: 'Green is a chroma-key screen: key it out in CapCut, Edits or Premiere to put him over your own footage.' },
+      { key: 'mascotColor', type: 'color', label: 'Mascot color' },
+      { key: 'mascotBgColor', type: 'color', label: 'Background color', when: (s) => s.mascotBackground === 'custom' },
+      { key: 'mascotSize', type: 'range', label: 'Size', min: 0.5, max: 2, step: 0.05, unit: '×' },
+      { key: 'mascotPlace', type: 'segmented', label: 'Position', options: [['bottom', 'On the bottom'], ['center', 'Centered']] },
+    ],
+  },
+  {
     id: 'content',
     title: 'Content',
+    when: titles,
     controls: [
       { key: 'title', type: 'textarea', label: 'Title', toggle: 'showTitle', rows: 2, when: (s) => s.mode === 'intro',
         hint: 'Line breaks are kept. Wrap words in *asterisks* to highlight them.' },
@@ -171,6 +231,7 @@ export const SECTIONS = [
   {
     id: 'motion',
     title: 'Motion',
+    when: titles,
     controls: [
       { key: 'fitLength', type: 'switch', label: 'Fixed length' },
       { key: 'length', type: 'range', label: 'Length', min: 3, max: 15, step: 0.5, unit: 's', when: (s) => s.fitLength && s.mode === 'intro',
@@ -214,7 +275,7 @@ export const SECTIONS = [
   {
     id: 'logo',
     title: 'Logo',
-    when: (s) => s.mode === 'outro' || s.showLogo,
+    when: (s) => s.mode === 'outro' || (titles(s) && s.showLogo),
     controls: [
       { key: 'glyphPattern', type: 'select', label: 'Mark animation',
         options: [['dissolve', 'Dissolve up'], ['ripple', 'Ripple'], ['sweep', 'Sweep across'], ['spin', 'Spin'], ['random', 'Scatter']] },
@@ -230,6 +291,7 @@ export const SECTIONS = [
   {
     id: 'type',
     title: 'Typography',
+    when: titles,
     controls: [
       { key: 'titleSize', type: 'range', label: 'Title size', min: 48, max: 200, step: 1, unit: 'px' },
       { key: 'titleTracking', type: 'range', label: 'Title tracking', min: -6, max: 4, step: 0.1, unit: '%' },
@@ -247,6 +309,7 @@ export const SECTIONS = [
   {
     id: 'layout',
     title: 'Layout',
+    when: titles,
     controls: [
       { key: 'spacing', type: 'range', label: 'Spacing', min: 0.4, max: 2, step: 0.05, unit: '×' },
       { key: 'offsetY', type: 'range', label: 'Vertical offset', min: -300, max: 300, step: 2, unit: 'px' },
@@ -255,7 +318,7 @@ export const SECTIONS = [
   {
     id: 'background',
     title: 'Background',
-    when: (s) => !(s.mode === 'outro' && s.outroBackground === 'black'),
+    when: (s) => titles(s) && !(s.mode === 'outro' && s.outroBackground === 'black'),
     controls: [
       { key: 'bgPreset', type: 'segmented', label: 'Image',
         options: Object.entries(BACKGROUNDS).map(([id, b]) => [id, b.label]) },

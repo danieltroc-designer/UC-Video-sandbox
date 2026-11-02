@@ -2,6 +2,7 @@ import { DEFAULTS, SECTIONS, FORMATS, FPS_OPTIONS, BACKGROUNDS, LOOK_KEYS, TRACK
 import { createPlayer, loadAudio, decodeAudio } from './audio.js';
 import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
+import { createMascotRenderer } from './mascot.js';
 import { buildSidebar } from './controls.js';
 import { exportVideo } from './export.js';
 import { createLibrary } from './library.js';
@@ -33,14 +34,14 @@ const diff = (obj, base) => Object.fromEntries(Object.entries(obj).filter(([k, v
 
 const saved = readStore();
 const state = { ...DEFAULTS, ...lookOf(saved.values.bgPreset), ...saved.values };
-if (!['intro', 'outro', 'library'].includes(state.mode)) state.mode = DEFAULTS.mode;
+if (!['intro', 'outro', 'mascot', 'library'].includes(state.mode)) state.mode = DEFAULTS.mode;
 // What sliders reset to and what counts as "changed": the defaults, with the
 // active background's own look.
 const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
 // Look tweaks parked for the backgrounds that aren't active right now.
 const bgMemory = saved.bgMemory;
 let activePreset = state.bgPreset;
-let renderer, logo, currentBg, customBg = null, sidebar, library;
+let renderer, titles, mascot, logo, currentBg, customBg = null, sidebar, library;
 let audioBuffer = null, customAudio = null, audioError = '', muted = false;
 const player = createPlayer();
 let time = 0, duration = 1, timeline = null;
@@ -90,9 +91,20 @@ function loadImage(src) {
   });
 }
 
+// The mascot keeps its own format (square by default); the titles share one.
+const formatKey = () => (state.mode === 'mascot' ? 'mascotFormat' : 'format');
+
 function outputSize() {
-  const f = FORMATS[state.format] ?? FORMATS[DEFAULTS.format];
+  const f = FORMATS[state[formatKey()]] ?? FORMATS[DEFAULTS[formatKey()]];
   return [f.w, f.h];
+}
+
+// A fresh renderer for the current mode (exports and snapshots get their own).
+function makeRenderer() {
+  if (state.mode === 'mascot') return createMascotRenderer();
+  const r = createRenderer({ logo });
+  r.setBackground(currentBg);
+  return r;
 }
 
 // ------------------------------------------------------------------ preview
@@ -107,6 +119,7 @@ function prepare() {
     fitStage();
   }
   const before = duration;
+  renderer = state.mode === 'mascot' ? mascot : titles;
   ({ duration, timeline } = renderer.prepare(state, pw, ph));
   time = Math.min(time, duration);
   drawTimeline();
@@ -223,6 +236,7 @@ function bindTimeline() {
 
 function exportFilename(ext) {
   const [w, h] = outputSize();
+  if (state.mode === 'mascot') return `uploadcare-mascot-${state.mascotReaction}-${w}x${h}.${ext}`;
   const outro = state.mode === 'outro';
   const text = outro ? (state.showTagline ? state.outroTagline : '') : (state.showTitle ? state.title : '');
   const slug = text.replace(/\*/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || state.mode;
@@ -268,7 +282,7 @@ async function runExport() {
   exportAbort = new AbortController();
   try {
     const { blob, method } = await exportVideo({
-      settings: { ...state }, logo, background: currentBg, width: w, height: h, fps: state.fps,
+      settings: { ...state }, renderer: makeRenderer(), width: w, height: h, fps: state.fps,
       audio: audioBuffer && { buffer: audioBuffer, volume: state.musicVolume },
       signal: exportAbort.signal,
       onProgress: (p) => { bar.style.width = `${p * 100}%`; pct.textContent = `${Math.round(p * 100)}%`; },
@@ -305,8 +319,7 @@ function snapshot() {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  const r = createRenderer({ logo });
-  r.setBackground(currentBg);
+  const r = makeRenderer();
   r.prepare({ ...state }, w, h);
   r.render(c.getContext('2d', { alpha: false }), time);
   const name = exportFilename('png').replace('.png', `-${time.toFixed(2)}s.png`);
@@ -323,6 +336,7 @@ function syncMode() {
   }
   const lib = state.mode === 'library';
   document.body.classList.toggle('mode-library', lib);
+  $('#format').value = state[formatKey()];
   if (lib) setPlaying(false);
   library?.setActive(lib);
 }
@@ -357,7 +371,11 @@ const modal = {
 };
 
 function bindTopbar() {
-  syncMode();
+  const format = $('#format');
+  format.replaceChildren(...Object.entries(FORMATS).map(([value, f]) => new Option(f.label, value)));
+  format.addEventListener('change', () => { state[formatKey()] = format.value; persist(); prepare(); });
+
+  syncMode(); // also shows this mode's format
   for (const b of document.querySelectorAll('#mode button')) {
     b.addEventListener('click', () => {
       if (state.mode === b.dataset.mode) return;
@@ -369,11 +387,6 @@ function bindTopbar() {
       seek(0);
     });
   }
-
-  const format = $('#format');
-  format.replaceChildren(...Object.entries(FORMATS).map(([value, f]) => new Option(f.label, value)));
-  format.value = state.format;
-  format.addEventListener('change', () => { state.format = format.value; persist(); prepare(); });
 
   const fps = $('#fps');
   fps.replaceChildren(...FPS_OPTIONS.map((v) => new Option(`${v} fps`, v)));
@@ -407,7 +420,6 @@ function bindTopbar() {
     Object.assign(defaults, DEFAULTS);
     for (const id of Object.keys(bgMemory)) delete bgMemory[id];
     activePreset = state.bgPreset;
-    $('#format').value = state.format;
     $('#fps').value = state.fps;
     syncMode();
     setCustomBackground(null);
@@ -477,7 +489,7 @@ const imageSrc = (id) => (BACKGROUNDS[id] ?? BACKGROUNDS[DEFAULTS.bgPreset]).src
 
 async function applyBackground() {
   currentBg = customBg?.img ?? await presetImage(state.bgPreset);
-  renderer.setBackground(currentBg);
+  titles.setBackground(currentBg);
   prepare();
 }
 
@@ -521,8 +533,10 @@ async function waitForFonts() {
 async function boot() {
   await waitForFonts();
   [logo, currentBg] = await Promise.all([loadLogo('assets/lockup-dark.svg'), presetImage(state.bgPreset)]);
-  renderer = createRenderer({ logo });
-  renderer.setBackground(currentBg);
+  titles = createRenderer({ logo });
+  titles.setBackground(currentBg);
+  mascot = createMascotRenderer();
+  renderer = titles;
 
   sidebar = buildSidebar($('#controls'), {
     sections: SECTIONS,

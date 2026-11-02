@@ -1,4 +1,3 @@
-import { createRenderer } from './renderer.js';
 import { mixdown } from './audio.js';
 
 const MUXER_URL = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.1/+esm';
@@ -134,15 +133,14 @@ export async function isSupported({ label, ...config }) {
  * Renders every frame offline (never dropping frames) and encodes to MP4 via
  * WebCodecs. If the browser's encoder fails it retries with more conservative
  * settings, and finally falls back to a real-time MediaRecorder capture.
+ * `renderer` is a fresh renderer for the composition (titles or mascot).
  * Resolves to { blob, method }; never resolves with an empty video.
  */
-export async function exportVideo({ settings, logo, background, audio, width, height, fps, onProgress, onStatus, signal }) {
+export async function exportVideo({ settings, renderer, audio, width, height, fps, onProgress, onStatus, signal }) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d', { alpha: false });
-  const renderer = createRenderer({ logo });
-  renderer.setBackground(background);
   const { duration } = renderer.prepare(settings, width, height);
   const bitrate = Math.round(Math.min(80e6, Math.max(8e6, width * height * fps * 0.16)));
   // The soundtrack as heard in the video: trimmed to its length, faded at the end.
