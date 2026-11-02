@@ -9,3 +9,6 @@ __pycache__/
 *.pyc
 render/_out/
 render/_baseline/
+
+# compiled helpers (render/mov.mjs builds them on first use)
+render/_bin/

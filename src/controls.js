@@ -20,7 +20,7 @@ function formatValue(c, v) {
   return `${Number(v).toFixed(decimals)}${c.unit ?? ''}`;
 }
 
-export function buildSidebar(root, { sections, state, defaults, onChange, onFile, fileNote }) {
+export function buildSidebar(root, { sections, state, defaults, onChange, onFile, fileNote, onAction }) {
   const syncers = [];
   const conditionals = [];
 
@@ -127,6 +127,13 @@ export function buildSidebar(root, { sections, state, defaults, onChange, onFile
         el('span', { class: 'field-label', text: c.label }),
         el('div', { class: 'select' }, select),
       ]);
+    },
+
+    // One-off actions (downloads); `onAction(key, value)` handles the click.
+    buttons(c) {
+      const row = el('div', { class: 'action-row' }, c.options.map(([value, label]) =>
+        el('button', { class: 'btn small', type: 'button', text: label, onclick: () => onAction(c.key, value) })));
+      return el('div', { class: 'field' }, [head(c), row, c.hint && el('p', { class: 'hint', text: c.hint })]);
     },
 
     // A file the user brings (image, audio); `onFile(key, file|null)` handles it.

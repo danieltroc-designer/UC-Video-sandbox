@@ -3,6 +3,7 @@ import { createPlayer, loadAudio, decodeAudio } from './audio.js';
 import { loadLogo } from './logo.js';
 import { createRenderer } from './renderer.js';
 import { createMascotRenderer } from './mascot.js';
+import { mascotGif, mascotLottie } from './mascot-export.js';
 import { buildSidebar } from './controls.js';
 import { exportVideo } from './export.js';
 import { createLibrary } from './library.js';
@@ -234,8 +235,7 @@ function bindTimeline() {
 
 // ------------------------------------------------------------------- export
 
-function exportFilename(ext) {
-  const [w, h] = outputSize();
+function exportFilename(ext, [w, h] = outputSize()) {
   if (state.mode === 'mascot') return `uploadcare-mascot-${state.mascotReaction}-${w}x${h}.${ext}`;
   const outro = state.mode === 'outro';
   const text = outro ? (state.showTagline ? state.outroTagline : '') : (state.showTitle ? state.title : '');
@@ -308,6 +308,89 @@ async function runExport() {
       modal.classList.add('is-error');
       status.textContent = `Export failed: ${err.message}`;
       close.textContent = 'Close';
+    }
+  } finally {
+    exportAbort = null;
+  }
+}
+
+const MOV_LOCAL = 'MOV export encodes on your Mac. In Terminal, run npm start in the project folder, then open localhost:5173.';
+
+// Transparent MOV through the local render API (render/mov.mjs), saved to Downloads.
+async function exportMov(codec) {
+  if (exportAbort) return;
+  const [w, h] = outputSize();
+  setPlaying(false);
+  modal.open('Exporting MOV');
+  const health = await fetch('/api/health', { cache: 'no-store' }).then((r) => r.ok && r.json()).catch(() => null);
+  if (!health?.mov) { modal.error(health ? 'MOV export needs macOS: it encodes with AVFoundation.' : MOV_LOCAL); return; }
+  exportAbort = new AbortController();
+  const request = async (path, opts) => {
+    const r = await fetch(path, opts);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || `${r.status} ${r.statusText}`);
+    return body;
+  };
+  try {
+    const { id } = await request('/api/mov', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { ...state }, width: w, height: h, codec }),
+    });
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 300));
+      if (exportAbort.signal.aborted) {
+        await fetch(`/api/mov/${id}`, { method: 'DELETE' }).catch(() => {});
+        throw new DOMException('Export cancelled', 'AbortError');
+      }
+      const job = await request(`/api/mov/${id}`);
+      modal.progress(job.progress);
+      modal.status(job.status);
+      if (job.state === 'error') throw new Error(job.error);
+      if (job.state === 'cancelled') throw new DOMException('Export cancelled', 'AbortError');
+      if (job.state === 'done') {
+        const r = job.result;
+        modal.done('MOV saved', `${(r.bytes / 1e6).toFixed(1)} MB`, `Saved to Downloads: ${r.name} · ${r.codec}, transparent`);
+        break;
+      }
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') modal.close();
+    else {
+      console.error(err);
+      modal.error(`Export failed: ${err.message}`);
+    }
+  } finally {
+    exportAbort = null;
+  }
+}
+
+// Mascot GIF / Lottie, with no background.
+async function exportTransparent(kind) {
+  if (kind === 'prores' || kind === 'hevc') return exportMov(kind);
+  if (exportAbort) return;
+  const [w, h] = outputSize();
+  const gif = kind === 'gif';
+  const link = $('#exportDownload');
+  setPlaying(false);
+  modal.open(gif ? 'Exporting GIF' : 'Exporting Lottie');
+  modal.status(`Encoding ${gif ? 'a transparent GIF' : 'Lottie JSON'}…`);
+  exportAbort = new AbortController();
+  try {
+    const settings = { ...state };
+    const { blob, width, height, frames } = gif
+      ? await mascotGif(settings, w, h, { signal: exportAbort.signal, onProgress: (p) => modal.progress(p) })
+      : mascotLottie(settings, w, h);
+    Object.assign(link, { href: blobUrl(kind, blob), download: exportFilename(gif ? 'gif' : 'json', [width, height]) });
+    link.lastChild.textContent = ` Download ${gif ? 'GIF' : 'Lottie'}`;
+    link.hidden = false;
+    const size = blob.size < 1e6 ? `${Math.max(1, Math.round(blob.size / 1e3))} KB` : `${(blob.size / 1e6).toFixed(1)} MB`;
+    modal.done(gif ? 'GIF ready' : 'Lottie ready', size, `${width}×${height} · transparent · ${frames} ${gif ? 'frames' : 'unique frames'}`);
+    link.focus();
+  } catch (err) {
+    if (err.name === 'AbortError') modal.close();
+    else {
+      console.error(err);
+      modal.error(`Export failed: ${err.message}`);
     }
   } finally {
     exportAbort = null;
@@ -550,6 +633,7 @@ async function boot() {
       prepare();
     },
     onFile: (key, file) => (key === 'musicFile' ? setCustomAudio(file) : setCustomBackground(file)),
+    onAction: (key, value) => key === 'mascotDownload' && exportTransparent(value),
     fileNote: (key) => (key === 'musicFile'
       ? (customAudio ? `Using ${customAudio.name} instead of the track above.` : audioError)
       : customBg && `Using ${customBg.name} with the ${BACKGROUNDS[state.bgPreset].label} look.`),

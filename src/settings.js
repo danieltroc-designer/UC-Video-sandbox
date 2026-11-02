@@ -214,6 +214,16 @@ export const SECTIONS = [
     ],
   },
   {
+    id: 'mascotExport',
+    title: 'Transparent export',
+    when: (s) => s.mode === 'mascot',
+    controls: [
+      { key: 'mascotDownload', type: 'buttons', label: 'No background',
+        options: [['prores', 'MOV · ProRes'], ['hevc', 'MOV · HEVC'], ['gif', 'GIF'], ['lottie', 'Lottie']],
+        hint: 'To lay over your own video. MOV is what editors want: ProRes 4444 for Premiere, Final Cut, DaVinci or CapCut desktop, HEVC (much smaller) for iPhone and Apple apps — both encode on your Mac (npm start) and save to Downloads. GIF suits chats and sticker apps; Lottie (JSON) is vector, for websites and apps.' },
+    ],
+  },
+  {
     id: 'content',
     title: 'Content',
     when: titles,

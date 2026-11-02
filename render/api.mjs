@@ -9,13 +9,17 @@
  *   GET  /api/render/:id/file     -> the MP4 (also saved to ~/Downloads)
  *   DELETE /api/render/:id        -> cancel
  *
- * Jobs run one at a time on a shared headless Chrome.
+ *   POST /api/mov  {settings, width, height, codec}  -> { id }   transparent mascot MOV
+ *   GET / DELETE /api/mov/:id     -> as above (saved to ~/Downloads)
+ *
+ * Jobs run one at a time (Library cards on a shared headless Chrome).
  */
 import { createReadStream, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FORMATS, findChrome, isDeck, launch, renderCard } from './render.mjs';
+import { MOV_CODECS, writeMascotMov } from './mov.mjs';
 
 const OUT = join(homedir(), 'Downloads');
 const jobs = new Map();
@@ -38,13 +42,17 @@ async function run(job, baseUrl) {
   if (job.state === 'cancelled') return;
   job.state = 'rendering';
   try {
-    browser ??= await launch();
-    if (!browser.connected) browser = await launch();
-    job.result = await renderCard({
-      ...job.request, out: OUT, baseUrl, browser, signal: job.controller.signal,
+    const hooks = {
+      out: OUT, signal: job.controller.signal,
       onProgress: (p) => { job.progress = p; },
       onStatus: (s) => { job.status = s; },
-    });
+    };
+    if (job.kind === 'mov') job.result = await writeMascotMov({ ...job.request, ...hooks });
+    else {
+      browser ??= await launch();
+      if (!browser.connected) browser = await launch();
+      job.result = await renderCard({ ...job.request, ...hooks, baseUrl, browser });
+    }
     job.state = 'done';
     job.progress = 1;
   } catch (err) {
@@ -62,10 +70,24 @@ export async function handle(req, res, { baseUrl }) {
   if (parts[1] === 'health') {
     let chrome = null;
     try { chrome = findChrome(); } catch { /* reported as null */ }
-    return json(res, 200, { render: true, chrome, out: OUT });
+    return json(res, 200, { render: true, chrome, mov: process.platform === 'darwin', out: OUT });
   }
 
-  if (parts[1] !== 'render') return json(res, 404, { error: 'Not found' });
+  if (parts[1] !== 'render' && parts[1] !== 'mov') return json(res, 404, { error: 'Not found' });
+
+  if (req.method === 'POST' && parts.length === 2 && parts[1] === 'mov') {
+    const body = await readBody(req);
+    const size = (v) => Math.trunc(Number(v));
+    const request = { settings: body.settings, width: size(body.width), height: size(body.height), codec: String(body.codec) };
+    const ok = request.settings?.mode === 'mascot' && MOV_CODECS[request.codec]
+      && [24, 25, 30, 50, 60].includes(Number(request.settings.fps))
+      && [request.width, request.height].every((v) => v >= 16 && v <= 4096 && v % 2 === 0);
+    if (!ok) return json(res, 400, { error: 'Expected Mascot settings, a supported codec and an even size up to 4096' });
+    const job = { id: randomUUID(), kind: 'mov', request, state: 'queued', progress: 0, status: 'Queued', controller: new AbortController() };
+    jobs.set(job.id, job);
+    queue = queue.then(() => run(job, baseUrl));
+    return json(res, 202, { id: job.id });
+  }
 
   if (req.method === 'POST' && parts.length === 2) {
     const body = await readBody(req);
@@ -99,7 +121,7 @@ export async function handle(req, res, { baseUrl }) {
     if (job.state !== 'done') return json(res, 409, { error: 'Not finished' });
     const { file, name } = job.result;
     res.writeHead(200, {
-      'Content-Type': 'video/mp4',
+      'Content-Type': job.kind === 'mov' ? 'video/quicktime' : 'video/mp4',
       'Content-Length': statSync(file).size,
       'Content-Disposition': `attachment; filename="${name}"`,
     });

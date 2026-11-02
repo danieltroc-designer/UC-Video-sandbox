@@ -1,10 +1,15 @@
-import { clamp, hash } from './easing.js';
+import { clamp, hash, hexToRgb } from './easing.js';
 import { FRAMES, PROPS, FONT } from './mascot-sprite.js';
 
 // Mascot mode: the pixel character from uploadcare.com playing one reaction
 // as a short clip. Like on the site it moves by swapping whole sprite frames
 // (no tweening) and every pixel lands on the sprite grid, so it stays crisp at
-// any size. render(ctx, t) is deterministic, which keeps exports frame-exact.
+// any size. A frame is a list of rectangles (scene(t)) that render() paints
+// and the transparent exports (mascot-export.js) encode; both are
+// deterministic for a given time, which keeps exports frame-exact.
+
+// Scene colours: the mascot, and his face (eyes, mouth, caption text).
+export const INK = 1, FACE = 2;
 
 const CELL = 24; // sprite cell, in sprite pixels
 const VIEW = 40; // sprite pixels across the frame's short edge at 1× size
@@ -17,22 +22,53 @@ const POP = 0.08, TYPE = 0.045; // caption: squashed first frame, then one lette
 const PAD = [4, 3]; // caption padding, in font pixels
 const GREEN = '#00b140'; // standard chroma-key green
 
-// Pixel art → horizontal runs [x, y, length]. With `height`, the art is
-// bottom-aligned in a cell that tall.
-function parse(art, height) {
-  const rows = art.trim().split('\n').map((r) => r.trim());
-  const top = (height ?? rows.length) - rows.length;
-  const runs = [];
-  rows.forEach((row, y) => {
+// A grid of booleans → rectangles [x, y, w, h]: the runs along each row,
+// grown downwards while the rows below repeat them.
+function rectsOf(grid) {
+  const rects = [];
+  let open = new Map();
+  grid.forEach((row, y) => {
+    const next = new Map();
     for (let x = 0; x < row.length; x++) {
-      if (row[x] !== '#') continue;
+      if (!row[x]) continue;
       let end = x;
-      while (row[end + 1] === '#') end++;
-      runs.push([x, top + y, end - x + 1]);
+      while (row[end + 1]) end++;
+      const key = x * 64 + end;
+      let r = open.get(key);
+      if (r) r[3]++;
+      else rects.push((r = [x, y, end - x + 1, 1]));
+      next.set(key, r);
       x = end;
     }
+    open = next;
   });
-  return { w: Math.max(...rows.map((r) => r.length)), h: height ?? rows.length, runs };
+  return rects;
+}
+
+// The empty pixels the outside can't reach: eyes and mouth. They get the face
+// colour, so nothing shows through them on a transparent or keyed background.
+function enclosed(grid) {
+  const holes = grid.map((row) => row.map((ink) => !ink));
+  const h = grid.length, w = grid[0].length;
+  const stack = [];
+  const reach = (x, y) => { if (holes[y]?.[x]) { holes[y][x] = false; stack.push([x, y]); } };
+  for (let x = 0; x < w; x++) { reach(x, 0); reach(x, h - 1); }
+  for (let y = 0; y < h; y++) { reach(0, y); reach(w - 1, y); }
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    reach(x + 1, y); reach(x - 1, y); reach(x, y + 1); reach(x, y - 1);
+  }
+  return holes;
+}
+
+// Pixel art → { w, h, rects, holes }. With `height`, the art is bottom-aligned
+// in a cell that tall.
+function parse(art, height) {
+  const rows = art.trim().split('\n').map((r) => r.trim());
+  const w = Math.max(...rows.map((r) => r.length)), h = height ?? rows.length;
+  const grid = Array.from({ length: h }, (_, y) =>
+    Array.from({ length: w }, (_, x) => rows[y - (h - rows.length)]?.[x] === '#'));
+  return { w, h, rects: rectsOf(grid), holes: rectsOf(enclosed(grid)) };
 }
 
 const ART = Object.fromEntries(Object.entries(FRAMES).map(([id, art]) => [id, parse(art, CELL)]));
@@ -42,11 +78,10 @@ const GLYPHS = Object.fromEntries(Object.entries(FONT).map(([ch, rows]) => {
   let lo = 0, hi = 4; // trim to the inked columns
   while (lo < 4 && !(ink & (16 >> lo))) lo++;
   while (hi > lo && !(ink & (16 >> hi))) hi--;
-  const runs = [];
-  rows.forEach((r, y) => { for (let x = lo; x <= hi; x++) if (r & (16 >> x)) runs.push([x - lo, y, 1]); });
-  return [ch, { w: hi - lo + 1, h: 7, runs }];
+  const grid = rows.map((r) => Array.from({ length: hi - lo + 1 }, (_, x) => !!(r & (16 >> (x + lo)))));
+  return [ch, { w: hi - lo + 1, h: 7, rects: rectsOf(grid), holes: [] }]; // the bubble shows through its counters
 }));
-GLYPHS[' '] = { w: 3, h: 7, runs: [] };
+GLYPHS[' '] = { w: 3, h: 7, rects: [], holes: [] };
 
 // ------------------------------------------------------------- reactions
 
@@ -133,9 +168,13 @@ export const EXITS = { none: 'None', hop: 'Hop down', walk: 'Walk off' };
 
 const msOf = (steps) => steps.reduce((a, [, ms]) => a + ms, 0);
 
-function drawArt(ctx, art, x0, y0, unit, mirror = false) {
-  for (const [x, y, n] of art.runs) {
-    ctx.fillRect(x0 + (mirror ? art.w - x - n : x) * unit, y0 + y * unit, n * unit, unit);
+// Adds a piece of art to a scene as [colour, x, y, w, h] rectangles in device
+// pixels: ink first, then its holes in the face colour.
+function addArt(ops, art, x0, y0, unit, mirror = false, color = INK) {
+  for (const [list, c] of [[art.rects, color], [art.holes, FACE]]) {
+    for (const [x, y, w, h] of list) {
+      ops.push([c, x0 + (mirror ? art.w - x - w : x) * unit, y0 + y * unit, w * unit, h * unit]);
+    }
   }
 }
 
@@ -148,10 +187,17 @@ export function mascotIcon(id, color = '#ffcf3e') {
   const ctx = c.getContext('2d');
   ctx.fillStyle = color;
   const ox = 2, oy = 30 - CELL; // feet on the bottom edge, room for props above
-  drawArt(ctx, ART[frame], ox + (x.dx ?? 0), oy + (x.dy ?? 0), 1);
-  for (const [name, px, py] of x.props ?? []) drawArt(ctx, PROP[name], ox + px, oy + py, 1);
+  const ops = [];
+  addArt(ops, ART[frame], ox + (x.dx ?? 0), oy + (x.dy ?? 0), 1);
+  for (const [name, px, py] of x.props ?? []) addArt(ops, PROP[name], ox + px, oy + py, 1);
+  for (const [k, ...rect] of ops) if (k === INK) ctx.fillRect(...rect); // holes stay see-through on the tile
   return c;
 }
+
+const isDark = (hex) => {
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 100;
+};
 
 // ---------------------------------------------------------------- renderer
 
@@ -170,12 +216,14 @@ export function createMascotRenderer() {
     return { duration: T.duration, timeline: T };
   }
 
+  // His face matches the background, except on green screen, where it has to
+  // survive the key: then it's black (or white on a dark mascot).
   function palette() {
     const c = s.mascotColor;
-    if (s.mascotBackground === 'inverted') return { bg: c, ink: '#000000' };
-    if (s.mascotBackground === 'green') return { bg: GREEN, ink: c };
-    if (s.mascotBackground === 'custom') return { bg: s.mascotBgColor, ink: c };
-    return { bg: '#000000', ink: c };
+    if (s.mascotBackground === 'inverted') return { bg: c, ink: '#000000', face: c };
+    if (s.mascotBackground === 'green') return { bg: GREEN, ink: c, face: isDark(c) ? '#ffffff' : '#000000' };
+    const bg = s.mascotBackground === 'custom' ? s.mascotBgColor : '#000000';
+    return { bg, ink: c, face: bg };
   }
 
   function computeLayout() {
@@ -277,8 +325,24 @@ export function createMascotRenderer() {
     return beats[lo];
   }
 
-  function render(ctx, t) {
+  // Everything on screen at `t`, back to front, as [colour, x, y, w, h]
+  // rectangles in device pixels (colour is INK or FACE); the background is
+  // left out so exports can keep it transparent.
+  function scene(t) {
     const { p, ox, oy, flip } = L;
+    const ops = [];
+    const beat = beatAt(t);
+    if (beat.frame) addArt(ops, ART[beat.frame], ox + beat.dx * p, oy + beat.dy * p, p, flip);
+    for (const [name, x, y] of beat.props) {
+      const art = PROP[name]; // props move to the other side but aren't mirrored (a ? stays a ?)
+      addArt(ops, art, ox + (flip ? CELL - x - art.w : x) * p, oy + y * p, p);
+    }
+    addConfetti(ops, t);
+    addCaption(ops, t);
+    return ops;
+  }
+
+  function render(ctx, t) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
@@ -286,23 +350,18 @@ export function createMascotRenderer() {
     ctx.filter = 'none';
     ctx.fillStyle = L.bg;
     ctx.fillRect(0, 0, W, H);
-
-    ctx.fillStyle = L.ink;
-    const beat = beatAt(t);
-    if (beat.frame) drawArt(ctx, ART[beat.frame], ox + beat.dx * p, oy + beat.dy * p, p, flip);
-    for (const [name, x, y] of beat.props) {
-      const art = PROP[name]; // props move to the other side but aren't mirrored (a ? stays a ?)
-      drawArt(ctx, art, ox + (flip ? CELL - x - art.w : x) * p, oy + y * p, p);
+    let color = 0;
+    for (const [c, x, y, w, h] of scene(t)) {
+      if (c !== color) ctx.fillStyle = (color = c) === INK ? L.ink : L.face;
+      ctx.fillRect(x, y, w, h);
     }
-    drawConfetti(ctx, t);
-    drawCaption(ctx, t);
     ctx.restore();
   }
 
   // Each burst throws a handful of pixels up from behind his head; they arc,
   // blink out, and stay hidden behind him (one colour, so they'd only read as
   // bumps on the body). Steps at 12 fps like sprite frames.
-  function drawConfetti(ctx, t) {
+  function addConfetti(ops, t) {
     const { p, ox, oy, flip } = L;
     for (const b of T.bursts) {
       const age = Math.floor((t - b.t) * 12) / 12;
@@ -316,40 +375,37 @@ export function createMascotRenderer() {
         const x = Math.round(12 + side * (2 + 4 * r(4) + (8 + 22 * r(6)) * age));
         const y = Math.round(2 - 2 * r(7) - (14 + 22 * r(3)) * age + 45 * age * age);
         if (x + n > BODY.x0 - 1 && x < BODY.x1 + 1 && y + n > 0) continue; // behind him
-        ctx.fillRect(ox + (flip ? CELL - x - n : x) * p, oy + y * p, n * p, n * p);
+        ops.push([INK, ox + (flip ? CELL - x - n : x) * p, oy + y * p, n * p, n * p]);
       }
     }
   }
 
   // Speech bubble: ink box with knocked-off corners and a stepped tail, the
-  // text cut out of it in the background colour and typed on letter by letter.
-  function drawCaption(ctx, t) {
+  // text in the face colour, typed on letter by letter.
+  function addCaption(ops, t) {
     const c = L.cap, C = T.caption;
     if (!c || t < C.start || t >= C.end) return;
     const age = C.pop ? t - C.start : Infinity;
     const q = c.q;
-    const box = (x, y, w, h) => {
-      ctx.fillRect(x + q, y, w - 2 * q, h);
-      ctx.fillRect(x, y + q, w, h - 2 * q);
-    };
-    ctx.fillStyle = L.ink;
+    const box = (x, y, w, h) => ops.push([INK, x + q, y, w - 2 * q, h], [INK, x, y + q, w, h - 2 * q]);
     const bottom = c.y + c.h;
-    ctx.fillRect(c.tailX - 2 * q, bottom, 4 * q, q);
-    ctx.fillRect(c.tailX - q, bottom + q, 2 * q, q);
+    ops.push([INK, c.tailX - 2 * q, bottom, 4 * q, q], [INK, c.tailX - q, bottom + q, 2 * q, q]);
     if (age < POP) {
       const w = Math.round(c.w / 2 / q) * q, h = Math.round(c.h / 2 / q) * q;
       box(c.tailX - Math.round(w / 2 / q) * q, bottom - h, w, h);
       return;
     }
     box(c.x, c.y, c.w, c.h);
-    ctx.fillStyle = L.bg;
     let x = c.x + PAD[0] * q;
     const shown = Math.floor((age - POP) / TYPE) + 1;
     c.glyphs.slice(0, shown).forEach((g) => {
-      drawArt(ctx, g, x, c.y + PAD[1] * q, q);
+      addArt(ops, g, x, c.y + PAD[1] * q, q, false, FACE);
       x += (g.w + 1) * q;
     });
   }
 
-  return { prepare, render, setBackground() {} };
+  return {
+    prepare, render, scene, setBackground() {},
+    get colors() { return { ink: L.ink, face: L.face }; },
+  };
 }
