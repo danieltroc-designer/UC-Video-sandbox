@@ -5,7 +5,7 @@
 // The Camera look films a card's 16:9 layout on an angled screen instead
 // (library/camera.html), in any output shape.
 
-export const LIB_DECKS = { 'ecommerce-expo': 'Ecommerce Expo', 'webflow-booth': 'Webflow booth' };
+export const LIB_DECKS = { 'ecommerce-expo': 'Ecommerce Expo', 'webflow-booth': 'Webflow booth', shots: 'Shots' };
 export const LIB_FORMATS = {
   landscape: { label: 'Desktop', ratio: '16:9', w: 1920, h: 1080 },
   portrait: { label: 'Mobile', ratio: '9:16', w: 1080, h: 1920 },

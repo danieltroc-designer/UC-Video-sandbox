@@ -1,0 +1,1 @@
+import{o as e}from"./heroAnimations.CdSh9umU.js";document.querySelectorAll(`[data-hero-root]`).forEach(t=>{t.dataset.heroInit!==`1`&&(t.dataset.heroInit=`1`,e(t))});

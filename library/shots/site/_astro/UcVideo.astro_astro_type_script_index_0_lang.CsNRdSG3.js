@@ -1,0 +1,1 @@
+import"./uc-video.CRWDZTXT.js";var e=new CSSStyleSheet;e.replaceSync(`.video-js .vjs-tech { object-fit: cover; }`),document.querySelectorAll(`uc-video.uc-video`).forEach(t=>{let n=t.shadowRoot;n&&(n.adoptedStyleSheets=[...n.adoptedStyleSheets,e]),t.on(`xhr-hooks-ready`,()=>{let e=t.player.tech(!0).vhs;e&&(e.options_.useDevicePixelRatio=!0)})});

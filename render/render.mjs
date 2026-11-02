@@ -12,7 +12,8 @@
  *   node render/render.mjs --deck ecommerce-expo --card 1
  *   node render/render.mjs --deck webflow-booth --all --format all --scale 2
  *
- * Options: --card N (1-based) | --all, --format landscape|portrait|square|all,
+ * Options: --card N (1-based) | --label "text" (a card whose label has it) | --all,
+ * --format landscape|portrait|square|all,
  * --fps 30, --scale 1|2 (2 = 4K-class), --out <dir> (default ~/Downloads).
  *
  * Layout checks: --stills 0.5,2,5 renders those moments (seconds) into one
@@ -70,7 +71,7 @@ const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]
  */
 export async function renderCard({
   deck, card, format = 'landscape', fps = 30, scale = 1, out = join(homedir(), 'Downloads'),
-  baseUrl, browser: sharedBrowser, onProgress = () => {}, onStatus = () => {}, signal, stills, camera = false,
+  baseUrl, browser: sharedBrowser, onProgress = () => {}, onStatus = () => {}, signal, stills, camera = false, label,
 }) {
   if (!isDeck(deck)) throw new Error(`Unknown deck "${deck}"`);
   if (!FORMATS[format]) throw new Error(`Unknown format "${format}"`);
@@ -86,11 +87,21 @@ export async function renderCard({
     onStatus('Loading card');
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.evaluateOnNewDocument(installClock, 1);
+    const cdp = await page.createCDPSession();
+    // a desktop with a mouse: filmed web pages keep their hover styles and handlers
+    await cdp.send('Emulation.setEmulatedMedia', {
+      features: [{ name: 'hover', value: 'hover' }, { name: 'any-hover', value: 'hover' }, { name: 'pointer', value: 'fine' }],
+    });
+    const net = watchNetwork(page);
     // camera: the card plays in its 16:9 layout inside library/camera.html, filmed in perspective
-    const url = camera
+    const url = () => camera
       ? `${baseUrl}/library/camera.html?deck=${deck}&card=${card}&format=${format}&hold`
       : `${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold`;
-    await page.goto(url, { waitUntil: 'load' });
+    await page.goto(url(), { waitUntil: 'load' });
+    // by label: look it up in the deck as loaded (its card list may have changed since the caller looked)
+    const found = label && await page.evaluate((l) => window.__deckInfo().findIndex((c) => c.label.toLowerCase().includes(l)), label.toLowerCase());
+    if (label && found < 0) throw new Error(`No card labelled "${label}" in ${deck}`);
+    if (label && found !== card) { card = found; await page.goto(url(), { waitUntil: 'load' }); }
     if (camera) await page.waitForFunction(() => window.__cameraReady, { timeout: 20000 });
     const info = await page.evaluate((i) => window.__deckInfo()[i], card);
     if (!info) throw new Error(`${deck} has no card ${card + 1}`);
@@ -103,8 +114,9 @@ export async function renderCard({
     await page.evaluate(() => document.fonts.ready.then(() => window.__deckStart()));
     await page.waitForNetworkIdle({ idleTime: 300, timeout: 20000 }).catch(() => {});
     for (const f of page.frames()) {
+      // loaded images only: a lazy one off-screen never loads, and its decode() never settles
       await f.evaluate(async () => {
-        await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
+        await Promise.all([...document.images].filter((img) => img.complete).map((img) => img.decode().catch(() => {})));
         await document.fonts.ready;
       }).catch(() => {});
     }
@@ -112,16 +124,16 @@ export async function renderCard({
     await enc.goto(`${baseUrl}/render/encoder.html`, { waitUntil: 'load' });
     await enc.waitForFunction(() => window.encoderReady);
 
-    if (stills) return await contactSheet({ page, enc, deck, card, format, info, stills, out, width, height, camera });
+    if (stills) return await contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera });
     const method = await enc.evaluate((o) => window.startEncoder(o), { width, height, fps, bitsPerPixel: camera ? 0.38 : 0.18 });
 
     const frames = Math.max(1, Math.round(info.duration * fps));
-    const cdp = await page.createCDPSession();
     const inflight = [];
     onStatus(`Rendering ${frames} frames`);
     for (let i = 0; i < frames; i++) {
       if (signal?.aborted) throw new Error('Render cancelled');
       await advance(page, (i * 1000) / fps);
+      await net.settle();
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true });
       // Capture the next frame while this one encodes (the tab encodes in order).
       inflight.push(enc.evaluate((b64, idx) => window.encodeFrame(b64, idx), data, i));
@@ -145,6 +157,34 @@ export async function renderCard({
   }
 }
 
+/**
+ * Requests in flight, and a wait for them. Filmed web pages fetch images
+ * mid-animation (some built from URL API transforms) and seek their videos
+ * (render/clock.js); time doesn't move while we wait, so a frame never shows
+ * one half-loaded.
+ */
+function watchNetwork(page) {
+  let pending = 0;
+  page.on('request', () => { pending++; });
+  page.on('requestfinished', () => { pending--; });
+  page.on('requestfailed', () => { pending--; });
+  return {
+    async settle(timeout = 8000) {
+      const until = Date.now() + timeout;
+      const busy = async () => pending > 0 || (await Promise.all(page.frames().map((f) =>
+        f.evaluate(() => !!window.__vt?.mediaBusy?.()).catch(() => false)))).some(Boolean);
+      // a seeked video fetches its segment the same way
+      while (Date.now() < until && await busy()) await new Promise((r) => setTimeout(r, 15));
+      // …and decoded, or the screenshot can catch an empty box
+      for (const f of page.frames()) {
+        await f.evaluate(() => Promise.all([...document.images]
+          .filter((img) => img.complete && img.naturalWidth && !img.__ucDecoded)
+          .map((img) => { img.__ucDecoded = true; return img.decode().catch(() => {}); }))).catch(() => {});
+      }
+    },
+  };
+}
+
 /** Moves every frame's clock (the deck, and the camera page around it) to `ms`. */
 async function advance(page, ms) {
   for (const f of page.frames()) {
@@ -153,10 +193,16 @@ async function advance(page, ms) {
 }
 
 /** Renders `stills` (seconds) and tiles them into one labelled PNG. */
-async function contactSheet({ page, enc, deck, card, format, info, stills, out, width, height, camera }) {
+async function contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera }) {
   const shots = [];
+  // step through at 30 fps, as a video would: a cursor's hovers on the way there count
+  let now = 0;
   for (const t of stills) {
-    await advance(page, Math.max(0, t * 1000));
+    for (const end = Math.max(0, t * 1000); now < end;) {
+      now = Math.min(end, now + 1000 / 30);
+      await advance(page, now);
+    }
+    await net.settle();
     shots.push((await page.screenshot({ type: 'png', encoding: 'base64' })));
   }
   const cols = format === 'portrait' ? Math.min(5, stills.length) : format === 'square' ? Math.min(4, stills.length) : Math.min(3, stills.length);
@@ -196,7 +242,7 @@ async function cli(argv) {
     else if (k === 'camera') opt.camera = true;
     else { opt[k] = v; i++; }
   }
-  if (!opt.deck) throw new Error('Usage: node render/render.mjs --deck <deck> (--card N | --all) [--format landscape|portrait|square|all] [--fps 30] [--scale 1|2] [--out dir]');
+  if (!opt.deck) throw new Error('Usage: node render/render.mjs --deck <deck> (--card N | --label text | --all) [--format landscape|portrait|square|all] [--fps 30] [--scale 1|2] [--out dir]');
   const formats = opt.format === 'all' ? Object.keys(FORMATS) : [opt.format];
   const server = await serve(ROOT, 0);
   const baseUrl = `http://localhost:${server.address().port}`;
@@ -206,7 +252,9 @@ async function cli(argv) {
     await page.goto(`${baseUrl}/library/${opt.deck}/deck.html?card=0&hold`);
     const info = await page.evaluate(() => window.__deckInfo());
     await page.close();
-    const cards = opt.all ? info.map((c) => c.index) : [Number(opt.card) - 1];
+    const byLabel = opt.label && info.find((c) => c.label.toLowerCase().includes(String(opt.label).toLowerCase()));
+    if (opt.label && !byLabel) throw new Error(`No card labelled "${opt.label}" in ${opt.deck}`);
+    const cards = opt.all ? info.map((c) => c.index) : byLabel ? [byLabel.index] : [Number(opt.card) - 1];
     for (const card of cards) for (const format of formats) {
       // --format all: only the shapes this card has
       const has = info[card]?.formats.includes(opt.camera ? 'landscape' : format);
@@ -216,7 +264,7 @@ async function cli(argv) {
       const stills = opt.stills ? String(opt.stills).split(',').map(Number) : undefined;
       const r = await renderCard({
         deck: opt.deck, card, format, fps: Number(opt.fps), scale: Number(opt.scale), out: resolve(opt.out),
-        baseUrl, browser, stills, camera: !!opt.camera,
+        baseUrl, browser, stills, camera: !!opt.camera, label: byLabel ? String(opt.label) : undefined,
         onProgress: (p) => { const pct = Math.floor(p * 10); if (pct !== last) { last = pct; process.stdout.write(`\r  card ${card + 1} ${format}: ${pct * 10}%`); } },
       });
       if (stills) { console.log(`  ${r.file}`); continue; }

@@ -1,0 +1,1 @@
+import{t as e}from"./detailsAccordion.CIIgDzNP.js";e(Array.from(document.querySelectorAll(`.faq__item`)),{exclusive:!0});

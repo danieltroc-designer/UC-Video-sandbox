@@ -11,6 +11,10 @@
  *    virtual time since it started. They run at a playback rate of 1e-6 rather
  *    than paused, so they still reach "finished" — `finished` promises resolve
  *    and `animationend` fires on time;
+ *  - <video>/<audio> are held paused and seeked to the virtual time: play()
+ *    starts a virtual playhead (and `paused` reads false), autoplaying media
+ *    is taken over the same way. __vt.mediaBusy() is true while a seek is
+ *    still loading, so the renderer can wait for it;
  *  - Math.random is seeded, so a render is repeatable.
  *
  * Must stay self-contained: puppeteer serialises the function source.
@@ -69,9 +73,43 @@ export function installClock(seed = 1) {
     try { fn(...args); } catch (e) { console.error(e); }
   };
 
+  const media = new Map(); // element -> { at: virtual ms, from: its time then (s) }
+  const proto = HTMLMediaElement.prototype;
+  const nativePlay = proto.play, nativePause = proto.pause;
+  const nativePaused = Object.getOwnPropertyDescriptor(proto, 'paused').get;
+  proto.play = function () {
+    if (!media.has(this)) {
+      media.set(this, { at: now, from: this.currentTime || 0 });
+      this.dispatchEvent(new Event('play'));
+      this.dispatchEvent(new Event('playing'));
+    }
+    nativePause.call(this);
+    return Promise.resolve();
+  };
+  proto.pause = function () {
+    if (media.delete(this)) this.dispatchEvent(new Event('pause'));
+    return nativePause.call(this);
+  };
+  Object.defineProperty(proto, 'paused', { configurable: true, get() { return media.has(this) ? false : nativePaused.call(this); } });
+  const syncMedia = () => {
+    for (const el of document.querySelectorAll('video, audio')) {
+      if (!media.has(el) && !nativePaused.call(el)) { media.set(el, { at: now, from: el.currentTime || 0 }); nativePause.call(el); }
+    }
+    for (const [el, m] of media) {
+      let t = m.from + ((now - m.at) / 1000) * (el.playbackRate || 1);
+      const d = el.duration;
+      if (d > 0 && Number.isFinite(d)) {
+        if (el.loop) t %= d;
+        else if (t >= d) { t = d; media.delete(el); el.dispatchEvent(new Event('ended')); }
+      }
+      if (Math.abs(el.currentTime - t) > 1e-3) el.currentTime = t;
+    }
+  };
+
   window.__vt = {
     get now() { return now; },
     get pending() { return timers.size; },
+    mediaBusy() { return [...media.keys()].some((el) => el.seeking || (el.readyState < 2 && el.networkState !== 3)); },
     advance(ms) {
       const target = now + Math.max(0, ms);
       for (;;) {
@@ -94,6 +132,7 @@ export function installClock(seed = 1) {
         a.playbackRate = 1e-6;
         a.currentTime = now - starts.get(a);
       }
+      syncMedia();
     },
   };
 }

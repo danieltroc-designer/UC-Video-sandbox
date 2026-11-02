@@ -1,0 +1,1 @@
+import{t as e}from"./mascot.CxoQ58LR.js";document.querySelectorAll(`[data-mascot]`).forEach(t=>e(t));

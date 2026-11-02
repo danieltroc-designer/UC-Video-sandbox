@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uploadcare — Shots</title>
+<!--
+  Shots: the animations on uploadcare.com, filmed one component per card.
+
+  A card loads a mirrored page (site/<page>.html, see mirror.mjs) in a
+  same-origin iframe at desktop size, scrolls its component into view and
+  frames it on the stage. A scripted cursor moves over the page and drives a
+  virtual mouse: real pointer/mouse events for the site's own hover handlers,
+  plus a `.uc-hover` class that the mirrored CSS treats like `:hover`. Views
+  are keyframed per shape, and can follow the cursor, which is how the
+  vertical cuts zoom in and track the action. A card can also play a card of
+  another deck (the rebuilt homepage demo). Cards live in cards.js.
+
+  Same embed contract as the other decks:
+    deck.html?card=N&format=landscape|portrait|square[&hold]
+    window.__deckInfo() / __deckStart() / __deckRestart(card)
+
+  Everything runs on performance.now(), so the renderer's virtual clock drives
+  the cursor and the views together with the page inside.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* flex, not grid: an oversized stage stays centred, so scaling it down keeps it in view */
+  body { display: flex; align-items: center; justify-content: center; }
+  #stage {
+    position: relative; flex: none; overflow: hidden;
+    width: 1920px; height: 1080px;
+    background: #0a0a0a;
+    transform-origin: center center;
+  }
+  #stage[data-format="portrait"] { width: 1080px; height: 1920px; }
+  #stage[data-format="square"] { width: 1080px; height: 1080px; }
+  #stage iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: transparent; }
+  #cursor {
+    position: absolute; left: 0; top: 0; width: 40px; height: 40px;
+    pointer-events: none; opacity: 0; z-index: 2;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+  }
+  #stage[data-format="landscape"] #cursor { width: 34px; height: 34px; }
+  #ring {
+    position: absolute; left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px;
+    border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.9);
+    pointer-events: none; opacity: 0; z-index: 1;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="ring"></div>
+  <svg id="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2.5v17.2l4.3-4.1 2.7 6.2 3-1.3-2.7-6.1h6z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+</div>
+<script type="module">
+  import { CARDS } from './cards.js';
+
+  const FORMATS = { landscape: [1920, 1080], portrait: [1080, 1920], square: [1080, 1080] };
+  const q = new URLSearchParams(location.search);
+  const hold = q.has('hold');
+  let cardIx = Math.min(CARDS.length - 1, Math.max(0, parseInt(q.get('card'), 10) || 0));
+  const format = FORMATS[q.get('format')] ? q.get('format') : 'landscape';
+  const [W, H] = FORMATS[format];
+  const stage = document.getElementById('stage');
+  const cursorEl = document.getElementById('cursor');
+  const ring = document.getElementById('ring');
+  stage.dataset.format = format;
+
+  function fit() {
+    stage.style.transform = `scale(${Math.min(innerWidth / W, innerHeight / H)})`;
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
+
+  // ------------------------------------------------------------ card setup
+
+  let frame = null;   // the iframe
+  let card = null;
+  let t0 = null;      // start time, null until started
+  let ready = null;   // resolves when the card can start
+
+  function build(i) {
+    cardIx = i;
+    card = CARDS[i];
+    frame?.remove();
+    t0 = null;
+    frame = document.createElement('iframe');
+    frame.setAttribute('scrolling', 'no');
+    frame.tabIndex = -1;
+    stage.prepend(frame);
+    cursorEl.style.opacity = 0;
+    ring.style.opacity = 0;
+    ready = new Promise((resolve) => frame.addEventListener('load', () => resolve(prepare()), { once: true }));
+    if (card.kind === 'deck') {
+      frame.style.width = `${W}px`;
+      frame.style.height = `${H}px`;
+      frame.src = `../${card.deck}/deck.html?card=${card.card}&format=${format}&hold`;
+    } else {
+      const [vw, vh] = card.viewport ?? [1440, 900];
+      frame.style.width = `${vw}px`;
+      frame.style.height = `${vh}px`;
+      frame.src = `site/${card.page}.html`;
+    }
+    return ready;
+  }
+
+  function prepare() {
+    if (card.kind === 'deck') return;
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    const style = doc.createElement('style');
+    // no sticky navbar over the shot, no smooth scrolling, no text caret; and
+    // unless a card wants its surroundings, nothing but the component
+    const only = card.isolate === false ? '' : [].concat(card.isolate ?? card.target);
+    style.textContent = `
+      [data-navbar], header.navbar, .navbar { display: none !important; }
+      html { scroll-behavior: auto !important; }
+      * { caret-color: transparent !important; }
+      ${only ? `body { visibility: hidden; } ${only.map((sel) => `${sel}, ${sel} *`).join(', ')} { visibility: visible; }` : ''}
+      ${card.css ?? ''}`;
+    doc.head.append(style);
+    const target = doc.querySelector(card.target);
+    if (!target) throw new Error(`Shots: no ${card.target} on ${card.page}`);
+    const r = target.getBoundingClientRect();
+    const vh = frame.clientHeight;
+    win.scrollTo(0, Math.max(0, win.scrollY + r.top - (vh - r.height) / 2 + (card.scrollOffset ?? 0)));
+    stage.style.background = card.bg ?? getComputedStyle(doc.body).backgroundColor ?? '#0a0a0a';
+    mouse.reset(doc, win);
+    place(0);
+  }
+
+  // ------------------------------------------------------- virtual mouse
+
+  const mouse = {
+    doc: null, win: null, over: null, x: -1, y: -1,
+    reset(doc, win) { this.doc = doc; this.win = win; this.over = null; this.x = this.y = -1; },
+    chain(el) { const out = []; for (let e = el; e && e.nodeType === 1; e = e.parentElement) out.push(e); return out; },
+    fire(el, type, Ctor, bubbles) {
+      const { win, x, y } = this;
+      el.dispatchEvent(new Ctor(type, { bubbles, cancelable: true, composed: true, view: win, clientX: x, clientY: y, pointerType: 'mouse', isPrimary: true, pointerId: 1 }));
+    },
+    move(x, y) {
+      const { doc, win } = this;
+      if (!doc || (x === this.x && y === this.y)) return;
+      this.x = x; this.y = y;
+      const el = doc.elementFromPoint(x, y) ?? doc.documentElement;
+      if (el !== this.over) {
+        const was = this.chain(this.over), now = this.chain(el);
+        if (this.over) {
+          this.fire(this.over, 'pointerout', win.PointerEvent, true);
+          this.fire(this.over, 'mouseout', win.MouseEvent, true);
+        }
+        for (const e of was) if (!now.includes(e)) {
+          e.classList.remove('uc-hover');
+          this.fire(e, 'pointerleave', win.PointerEvent, false);
+          this.fire(e, 'mouseleave', win.MouseEvent, false);
+        }
+        this.fire(el, 'pointerover', win.PointerEvent, true);
+        this.fire(el, 'mouseover', win.MouseEvent, true);
+        for (const e of [...now].reverse()) if (!was.includes(e)) {
+          e.classList.add('uc-hover');
+          this.fire(e, 'pointerenter', win.PointerEvent, false);
+          this.fire(e, 'mouseenter', win.MouseEvent, false);
+        }
+        this.over = el;
+      }
+      this.fire(el, 'pointermove', win.PointerEvent, true);
+      this.fire(el, 'mousemove', win.MouseEvent, true);
+    },
+    click() {
+      const { over, win } = this;
+      if (!over) return;
+      this.fire(over, 'pointerdown', win.PointerEvent, true);
+      this.fire(over, 'mousedown', win.MouseEvent, true);
+      this.fire(over, 'pointerup', win.PointerEvent, true);
+      this.fire(over, 'mouseup', win.MouseEvent, true);
+      // SVG elements have no click(); an event works for everything
+      this.fire(over, 'click', win.MouseEvent, true);
+    },
+  };
+
+  // ----------------------------------------------------- cursor and views
+
+  // A point on the page: a selector (with `at` as a fraction of its box), or [x, y].
+  function pointOf(to, at = [0.5, 0.5]) {
+    if (Array.isArray(to)) return { x: to[0], y: to[1] };
+    const el = mouse.doc.querySelector(to);
+    if (!el) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width * at[0], y: r.top + r.height * at[1] };
+  }
+
+  // Cursor waypoints: arrive at `to` at time `t`, after a `move`-second glide.
+  function cursorAt(t) {
+    const path = card.cursor;
+    if (!path?.length) return null;
+    const start = card.cursorFrom ?? [frame.clientWidth * 0.7, frame.clientHeight + 60];
+    let prev = { x: start[0], y: start[1] };
+    for (const w of path) {
+      const move = w.move ?? 0.7;
+      const p = pointOf(w.to, w.at);
+      if (t < w.t - move) return prev;
+      if (t < w.t) return { x: lerp(prev.x, p.x, easeInOut((t - (w.t - move)) / move)), y: lerp(prev.y, p.y, easeInOut((t - (w.t - move)) / move)) };
+      prev = p;
+    }
+    return prev;
+  }
+
+  // A view: where the stage looks, as a centre and a scale.
+  //   { el, pad, cover }  frame an element (contain, or cover = fill and crop)
+  //   { rect: [x,y,w,h] } frame a box on the page
+  //   { cursor: true, w } follow the cursor, `w` page px across
+  //   zoom: multiplies the scale
+  function viewOf(v, t) {
+    let cx, cy, s;
+    if (v.cursor) {
+      const p = cursorAt(Math.max(0, t - (v.lag ?? 0.25))) ?? { x: frame.clientWidth / 2, y: frame.clientHeight / 2 };
+      cx = p.x + (v.dx ?? 0); cy = p.y + (v.dy ?? 0);
+      s = W / (v.w ?? 600);
+    } else {
+      let x, y, w, h;
+      if (v.rect) [x, y, w, h] = v.rect;
+      else {
+        const els = [].concat(v.el ?? card.target).map((sel) => mouse.doc.querySelector(sel)).filter(Boolean);
+        const rs = els.map((e) => e.getBoundingClientRect());
+        x = Math.min(...rs.map((r) => r.left)); y = Math.min(...rs.map((r) => r.top));
+        w = Math.max(...rs.map((r) => r.right)) - x; h = Math.max(...rs.map((r) => r.bottom)) - y;
+      }
+      const pad = v.pad ?? 48;
+      cx = x + w / 2 + (v.dx ?? 0); cy = y + h / 2 + (v.dy ?? 0);
+      s = (v.cover ? Math.max : Math.min)(W / (w + 2 * pad), H / (h + 2 * pad));
+    }
+    s *= v.zoom ?? 1;
+    // keep the view on the page where it can
+    const fw = frame.clientWidth, fh = frame.clientHeight, hw = W / s / 2, hh = H / s / 2;
+    if (v.clamp !== false) {
+      if (hw * 2 <= fw) cx = Math.min(fw - hw, Math.max(hw, cx));
+      if (hh * 2 <= fh) cy = Math.min(fh - hh, Math.max(hh, cy));
+    }
+    return { cx, cy, s };
+  }
+
+  function viewAt(t) {
+    const list = card.views?.[format] ?? [{ t: 0, el: card.target }];
+    let i = 0;
+    while (i < list.length - 1 && t >= list[i + 1].t) i++;
+    const cur = viewOf(list[i], t);
+    const dur = list[i].dur ?? 0.9;
+    if (i === 0 || t >= list[i].t + dur) return cur;
+    const from = viewAt(list[i].t - 1e-6);
+    const k = easeInOut(clamp01((t - list[i].t) / dur));
+    // blend in log scale, so zooming feels even
+    return { cx: lerp(from.cx, cur.cx, k), cy: lerp(from.cy, cur.cy, k), s: Math.exp(lerp(Math.log(from.s), Math.log(cur.s), k)) };
+  }
+
+  // Timed page actions: clicks at a cursor stop, scrolling, or custom calls.
+  let fired = new Set();
+  function act(t) {
+    for (const [i, w] of (card.cursor ?? []).entries()) {
+      if (w.click && t >= w.t + (w.clickDelay ?? 0.15) && !fired.has(`c${i}`)) { fired.add(`c${i}`); mouse.click(); pulse(t); }
+    }
+    for (const [i, a] of (card.actions ?? []).entries()) {
+      if (a.scroll != null) {
+        // scroll by `scroll` px over `dur` from time `t`
+        if (t < a.t) continue;
+        const k = easeInOut(clamp01((t - a.t) / (a.dur ?? 1)));
+        const base = a._base ??= mouse.win.scrollY;
+        mouse.win.scrollTo(0, base + a.scroll * k);
+      } else if (a.call && t >= a.t && !fired.has(`a${i}`)) {
+        fired.add(`a${i}`);
+        a.call(mouse.doc, mouse.win);
+      }
+    }
+  }
+
+  let ringAt = -1;
+  function pulse(t) { ringAt = t; }
+
+  function place(t) {
+    if (card.kind === 'deck' || !mouse.doc) return;
+    const v = viewAt(t);
+    frame.style.transform = `translate(${W / 2 - v.cx * v.s}px, ${H / 2 - v.cy * v.s}px) scale(${v.s})`;
+    const p = cursorAt(t);
+    if (p) {
+      mouse.move(Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100);
+      const sx = W / 2 + (p.x - v.cx) * v.s, sy = H / 2 + (p.y - v.cy) * v.s;
+      cursorEl.style.transform = `translate(${sx - 6}px, ${sy - 3}px)`;
+      cursorEl.style.opacity = t0 == null ? 0 : 1;
+      const rk = ringAt < 0 ? 1 : (t - ringAt) / 0.45;
+      ring.style.opacity = rk < 1 ? 1 - rk : 0;
+      ring.style.transform = `translate(${sx}px, ${sy}px) scale(${0.4 + 0.8 * clamp01(rk)})`;
+    }
+  }
+
+  function tick(now) {
+    if (t0 != null && card.kind === 'site' && mouse.doc) {
+      const t = (now - t0) / 1000;
+      act(t);
+      place(t);
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ------------------------------------------------------------- contract
+
+  async function start() {
+    await ready;
+    fired = new Set();
+    ringAt = -1;
+    for (const a of card.actions ?? []) delete a._base;
+    if (card.kind === 'deck') frame.contentWindow.__deckStart?.();
+    t0 = performance.now();
+    place(0);
+  }
+
+  window.__deckInfo = () => CARDS.map((c, index) => ({
+    index, type: c.kind, label: c.label, title: c.title, duration: c.duration,
+    formats: c.formats ?? Object.keys(FORMATS),
+  }));
+  window.__deckStart = start;
+  // a site card restarts by reloading its page, so its animations start over too
+  window.__deckRestart = (i = cardIx) => build(Math.min(CARDS.length - 1, Math.max(0, i | 0))).then(start);
+
+  build(cardIx);
+  if (!hold) ready.then(() => document.fonts.ready).then(start);
+</script>
+</body>
+</html>

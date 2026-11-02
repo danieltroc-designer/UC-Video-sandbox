@@ -6,8 +6,10 @@ Booth-deck animations, exportable card by card from the studio's **Library** mod
 | --- | --- | --- |
 | `ecommerce-expo/` | [danieltroc-designer/uc-eccomerce-expo](https://github.com/danieltroc-designer/uc-eccomerce-expo) @ `3df8c5a` | 7 — product flow, benefits, proof point, AI catalog admin, logo wall, infrastructure, booth CTA |
 | `webflow-booth/` | [danieltroc-designer/uploadcare-show](https://github.com/danieltroc-designer/uploadcare-show) @ `e122bf0` (the "simple" deck) | 7 — drop-in form, feature row, customer quote, logo wall, install app, how-it-works demo, file board |
+| `shots/` | uploadcare.com (mirrored pages) | the site's animations, one component per card, hover included; see [`shots/README.md`](shots/README.md) |
+| `uploadcare-web/` | uploadcare.com homepage | the how-it-works demo, rebuilt frame-exact; Shots plays its cards |
 
-Each folder is a vendored copy of the deck's build inputs (`build.py`, `build_simple.py`, `src/simple.template.html`, `assets/`, `tools/`). The copies diverge from their source repos on purpose:
+The two booth-deck folders are vendored copies of each deck's build inputs (`build.py`, `build_simple.py`, `src/simple.template.html`, `assets/`, `tools/`). The copies diverge from their source repos on purpose:
 
 - **Embed mode** (added by `patch_embed.py`): `deck.html?card=N&format=landscape|portrait|square` plays one card with no auto-advance and no kiosk chrome; `&hold` waits for `window.__deckStart()` so the renderer can start the clock. `window.__deckInfo()` lists the cards.
 - **Portrait and square layouts**: scoped under `#stage[data-format="portrait"|"square"]`; a card lists the shapes it has been recomposed for in `CARD_FORMATS`. The 16:9 cards stay identical to the source decks.

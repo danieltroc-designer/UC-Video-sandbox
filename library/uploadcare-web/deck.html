@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Uploadcare — homepage demo</title>
+<!--
+  The uploadcare.com homepage's "how it works" demo (upload | analyse | deliver)
+  as a Library deck: one 16:9 card with all three panels, and three vertical
+  shorts, one per panel.
+
+  Hand-written, no build step. Ported from the Webflow booth deck's pipeline
+  card (library/webflow-booth/src/simple.template.html: setupPipeline, the
+  .pd-* styles, Timeline, the pixel grid and the substrate), whose geometry is
+  the site's own drawn 1.35x larger. Media are copies of that deck's files.
+
+  Embed contract (same as the other decks):
+    deck.html?card=N&format=landscape|portrait|square[&hold]
+    window.__deckInfo()        -> [{index, type, label, title, duration, formats}]
+    window.__deckStart()       -> starts the card (with &hold the page waits for it)
+    window.__deckRestart(card) -> restarts in place, optionally on another card
+  Without ?card the page plays card 1 with a small picker (hidden in embeds).
+
+  Everything that moves is a function of time under render/clock.js: tweens are
+  Web Animations, beats are timers, the pixel grid and the ambient blips work
+  from timestamps (not frame counts) and draw from their own seeded PRNGs.
+-->
+<link rel="preload" href="media/commit-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face{font-family:'Commit Mono';font-style:normal;font-weight:400;font-display:block;
+    src:url(media/commit-mono-400.woff2) format('woff2')}
+
+  :root{
+    --bg:#090909;
+    --mono:'Commit Mono', ui-monospace, monospace;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:#f2f2f0;font-family:var(--mono);overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  /* ---------- stage: 1920x1080, 1080x1920 or 1080x1080, scaled to fit ---------- */
+  #viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+  #stage{width:1920px;height:1080px;position:relative;flex:none;transform-origin:center center;overflow:hidden;background:var(--bg)}
+  #stage[data-format="portrait"]{width:1080px;height:1920px}
+  #stage[data-format="square"]{width:1080px;height:1080px}
+  body.embed #ui{display:none!important}
+  body.embed, body.embed *{cursor:none!important}
+
+  /* ---------- ambient substrate: signal blips out in the margins ---------- */
+  #substrate{position:absolute;inset:0;z-index:0;pointer-events:none}
+  .sb-blip{position:absolute;width:5px;height:5px;background:var(--c,#fff);opacity:0}
+
+  /* the card fades up on entry (650ms, as a deck slide does) — a Web
+     Animation started by the score, not a transition, so it is timed from
+     the card's start even in a still that jumps straight past it */
+  #card{position:absolute;inset:0;z-index:1}
+
+  /* =======================================================================
+     The demo. Geometry and colours are the booth deck's port of the site
+     (its 13px mono set at 15px, boxes grown to match); each card places and
+     scales the shell. `scale` is its own property, so it composes with the
+     transforms the score animates.
+     ======================================================================= */
+  .pd-shell{position:absolute;border-radius:39px;background:#0c0c0c;
+    border:1px solid rgba(255,255,255,.05);padding:11px;overflow:hidden}
+  /* the uploaded photo blurred right down: a wash of the file's own colour
+     behind the analysis, wiping upward in lockstep with the progress bar */
+  .pd-bgwrap{position:absolute;left:50%;top:50%;width:340px;height:440px;
+    transform:translate(-50%,-50%);filter:blur(15px);opacity:.1;pointer-events:none;z-index:0}
+  .pd-bg{width:100%;height:100%;border-radius:32px;overflow:hidden;clip-path:inset(0 0 100% 0)}
+  .pd-bg img{width:100%;height:100%;object-fit:cover;display:block}
+
+  .pd-grid{position:relative;z-index:1;display:grid;grid-template-columns:1fr .8fr 1fr;gap:24px;height:100%}
+  .pd-cell{position:relative;z-index:1;border-radius:27px;background:#000;box-shadow:0 0 0 1px rgba(255,255,255,.05);
+    padding:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+  .pd-cell.mid{background:transparent;box-shadow:none;padding:0;overflow:visible;gap:20px}
+  .pd-inner{flex:1;width:100%;display:flex;align-items:center;justify-content:center;position:relative}
+
+  /* ---- upload: the drop ---- */
+  .pd-cursor{position:absolute;left:50%;top:50%;width:76.5px;height:99.5px;z-index:2;pointer-events:none;
+    opacity:0;transform:translate(150px,180px)}
+  .pd-cursor-thumb{width:100%;height:100%;border-radius:8px;overflow:hidden;
+    box-shadow:0 25px 50px -12px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.13);background:#181818}
+  .pd-cursor-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .pd-cursor-ic{position:absolute;bottom:-8.9px;right:-6.4px;width:12.9px;height:17.9px;
+    filter:drop-shadow(0 4px 3px rgba(0,0,0,.5))}
+  .pd-cursor-ic svg{width:100%;height:100%;display:block}
+  .pd-zone{position:relative;width:258px;height:333px;flex:none;border-radius:27px;
+    border:1px dashed rgba(255,255,255,.13);overflow:hidden;transition:border-color .3s ease}
+  .pd-zone[data-state="active"]{border-color:rgba(255,255,255,.25)}
+  .pd-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.25);transition:color .3s ease}
+  .pd-zone[data-state="active"] .pd-ph{color:rgba(255,255,255,.5)}
+  .pd-shot{width:100%;height:100%;object-fit:cover;border-radius:26px;padding:5px 8px;opacity:0;display:block}
+  .pd-track{position:absolute;bottom:21px;left:21px;right:21px;height:6px;padding:2px;
+    border-radius:999px;background:rgba(0,0,0,.2);backdrop-filter:blur(5px);overflow:hidden;opacity:0}
+  .pd-fill{height:100%;background:rgba(255,255,255,.9);border-radius:999px;transform-origin:left center;transform:scaleX(0)}
+  .pd-ctl{position:absolute;top:20px;right:21px;display:flex;gap:2px;opacity:0;transform:translateY(-8px)}
+  .pd-btn{width:32px;height:32px;background:rgba(9,9,9,.8);border-radius:8px;
+    display:flex;align-items:center;justify-content:center;color:#fff}
+  .pd-btn svg{width:14px;height:14px;display:block}
+  .pd-status{display:flex;align-items:center;gap:12px;margin-top:16px;opacity:0}
+  .pd-status i{width:8px;height:8px;background:#4ade80}
+  .pd-status span{font-size:14px;color:#a7a7a7;text-transform:uppercase;letter-spacing:.05em}
+
+  /* ---- analyse: pixel grid, progress ring, readout ---- */
+  .pd-pixel{width:100px;height:130px;flex:none;opacity:0}
+  .pd-pixel canvas{width:100%;height:100%;display:block}
+  .pd-prog{display:flex;align-items:center;justify-content:center;width:100%;margin:20px 0}
+  .pd-prog-side{flex:1;display:flex;justify-content:center}
+  .pd-dots{display:inline-flex;align-items:center;gap:4px}
+  .pd-dots i{width:3px;height:3px;background:rgba(255,255,255,.13)}
+  .pd-dots[data-state="working"] i{background:rgba(255,255,255,.25);animation:pdDot 1s ease-in-out infinite backwards}
+  @keyframes pdDot{0%,85%,100%{opacity:.1}30%{opacity:1}}
+  .pd-donut{flex-shrink:0;width:30px;height:30px}
+  .pd-donut .c{fill:rgba(255,255,255,.13)}
+  .pd-donut .c.lit{fill:#ffcf3e}
+  .pd-analysis{text-align:center;font-size:15px;color:#a7a7a7;text-transform:uppercase;line-height:20px;padding-bottom:30px}
+  .pd-analysis p{opacity:0;white-space:nowrap}
+  .pd-analysis b{font-weight:inherit;color:#fff}
+
+  /* ---- deliver: the picture, and the URL that describes it ----
+     The whole tag stays up, as on the site: bracket, host, UUID, then a row
+     per transform, then the closing bracket. The block is sized for all seven
+     rows from the start, so the picture above never moves as it grows. */
+  .pd-stage{position:relative;flex:none;width:230px;height:297px;opacity:0}
+  .pd-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0}
+  .pd-url{flex:none;width:100%;height:136.5px;margin-top:26px;font-size:15px;line-height:19.5px}
+  .pd-url .row{display:flex;flex-wrap:nowrap;white-space:nowrap}
+  .pd-url .bracket{color:rgba(255,255,255,.25)}
+  .pd-url .indent{padding-left:20px}
+  .pd-url .host,.pd-url .dim,.pd-url .arg{color:#a7a7a7}
+  .pd-url .id{color:#fff}
+  .pd-url .op{color:#ffd864}
+  .pd-url .tf{overflow:hidden;height:0;opacity:0}
+  .pd-url .st,.pd-url .cl{opacity:0}
+
+  /* =======================================================================
+     Card 1 — the homepage composition: the three-panel shell alone, centred
+     and drawn to fill the frame as the site's screenshot does (88% of the
+     width). No headline, no replay button, no compliance marks.
+     ======================================================================= */
+  .pd-shell.full{left:334px;top:263px;width:1252px;height:554px;scale:1.353}
+  /* only ever shown if a split shape is forced on it: shrink to fit */
+  #stage:not([data-format="landscape"]) .pd-shell.full{left:calc(50% - 626px);top:calc(50% - 277px);scale:.76}
+
+  /* =======================================================================
+     Cards 2–4 — one panel each, as a vertical short. The panel keeps its own
+     layout and is drawn `--k` times larger: ~88% of the width in portrait,
+     the height in square. Centred a little above the middle so the bottom
+     of the frame stays clear for captions. Each shell is cropped close to
+     its panel's content (the analysis column has no box of its own, so its
+     shell is the tightest), which is what sets each card's scale: on screen
+     the mono runs ~40-48px in portrait and ~26-33px in square.
+     ======================================================================= */
+  .pd-shell.solo{left:calc(50% - var(--w) / 2);top:calc(var(--cy) - var(--h) / 2);
+    width:var(--w);height:var(--h);scale:var(--k);display:flex}
+  .pd-shell.solo > .pd-cell{flex:1}
+  .solo .pd-status{margin-top:18px}
+  .solo .pd-status i{width:9px;height:9px}
+  .solo .pd-status span{font-size:15px}
+  .solo .pd-analysis{padding-bottom:0}
+  .s-up .pd-cell{padding:36px 40px 40px}
+  .s-out .pd-cell{padding:36px 28px}
+
+  #stage[data-format="portrait"] .pd-shell.solo{--cy:900px}
+  #stage[data-format="portrait"] .s-up{--w:360px;--h:480px;--k:2.6444}
+  #stage[data-format="portrait"] .s-mid{--w:300px;--h:420px;--k:3.1733}
+  #stage[data-format="portrait"] .s-out{--w:432px;--h:556px;--k:2.2037}
+
+  #stage[data-format="square"] .pd-shell.solo{--cy:500px}
+  #stage[data-format="square"] .s-up{--w:444px;--h:480px;--k:1.85}
+  #stage[data-format="square"] .s-mid{--w:400px;--h:400px;--k:2.22}
+  #stage[data-format="square"] .s-out{--w:432px;--h:510px;--k:1.741}
+  /* square is height-bound: a shorter picture box buys the URL bigger type */
+  #stage[data-format="square"] .s-out .pd-cell{padding:30px 28px}
+  #stage[data-format="square"] .s-out .pd-stage{height:270px}
+  #stage[data-format="square"] .s-out .pd-url{margin-top:22px}
+
+  /* only ever shown if 16:9 is forced on a split card: fit the height */
+  #stage[data-format="landscape"] .pd-shell.solo{--cy:540px}
+  #stage[data-format="landscape"] .s-up{--w:360px;--h:480px;--k:2}
+  #stage[data-format="landscape"] .s-mid{--w:360px;--h:462px;--k:2.08}
+  #stage[data-format="landscape"] .s-out{--w:432px;--h:556px;--k:1.73}
+
+  /* ---------- standalone picker (never in an embed) ---------- */
+  #ui{position:fixed;left:50%;bottom:14px;translate:-50% 0;z-index:10;display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+    font:500 12px/1 system-ui,sans-serif;padding:6px;border-radius:12px;background:rgba(24,24,27,.9);
+    box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+  #ui button{font:inherit;color:#c9c9cf;background:transparent;border:0;border-radius:7px;padding:7px 10px;cursor:pointer}
+  #ui button:hover{background:rgba(255,255,255,.06)}
+  #ui button[aria-pressed="true"]{color:#fff;background:rgba(255,255,255,.12)}
+  #ui button:disabled{opacity:.3;cursor:default}
+  #ui i{width:1px;background:rgba(255,255,255,.1);margin:2px 2px}
+
+  @media (prefers-reduced-motion:reduce){
+    .pd-zone,.pd-ph{transition:none!important}
+    .pd-dots[data-state="working"] i{animation:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div id="stage">
+    <div id="substrate"><div id="sbField"></div></div>
+    <div id="card"></div>
+  </div>
+</div>
+<nav id="ui"></nav>
+
+<script>
+/* ---------------- content ---------------- */
+const MEDIA = {
+  photo:  'media/photo.jpg',          // the upload
+  crop:   'media/crop-face.jpg',      // -/crop/face/190px190p/
+  square: 'media/scale-crop.jpg',     // -/scale_crop/460x460/center/
+  round:  'media/border-radius.png',  // -/border_radius/50p/
+};
+/* the homepage's file (the booth deck uses the storyboard's) */
+const UUID = '2cbc2e3d-ee55-434f-9e50-c5623a5fa8f8';
+/* the three transforms the URL grows, in order; each has a matching frame above */
+const TRANSFORMS = [
+  ['crop', 'face', '190px190p'],
+  ['scale_crop', '460x460', 'center'],
+  ['border_radius', '50p'],
+];
+/* *stars* mark the value half of a readout line, which is set in white */
+const ANALYSIS = [
+  'image/jpeg · 290 KB',
+  'malware: *clean*',
+  'nsfw: *safe*',
+  'optimized: *10 KB [-97%]*',
+  'Delivered in 7ms',
+];
+
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const EASE = { out:'cubic-bezier(.16,1,.3,1)', inOut:'cubic-bezier(.4,0,.2,1)' };
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------------- the beats ----------------
+   The site's demo timeline, in seconds, as the booth deck plays it:
+     0.5   the photo is dragged in over the drop zone
+     1.4   DROP: upload bar and background wash fill (2s); pixel grid reveals
+     3.5   ANALYSE: bar clears, trash button; grid flickers; delivery starts:
+           the original photo lands and the plain URL writes in
+     5.0 / 6.5 / 8.0   a transform per beat; the picture becomes what it says
+     8.6   the tag closes
+     9.0   STATUS: "upload successful", then the readout a line at a time
+     10.1  the ring fills cell by cell
+     11.1  SETTLE: the grid comes to rest
+   Every card plays this one score. A card passes `T`, which maps a beat onto
+   its own clock (shifted so it opens just before its panel moves, with dead
+   holds cut out), and builds only the panels it shows. */
+const DROP = 1.4, ANALYSE = 3.5, STATUS = 9, DONUT_AT = 10.1, SETTLE = 11.1;
+
+const CARDS = [
+  { type:'pipeline', label:'How it works', title:'The homepage demo, all three panels',
+    formats:['landscape'], duration:13, shell:'full', panels:['up','mid','out'],
+    T: t => t },
+  // the left panel is idle from the trash button (3.9) until "upload
+  // successful" (9.0) while the other two work: that hold is cut, so the
+  // status lands 0.4s after the button
+  { type:'upload', label:'Upload', title:'A photo drops in and uploads',
+    formats:['portrait','square'], duration:6.2, shell:'s-up', panels:['up'],
+    T: t => t < 8 ? t : t - 4.7 },
+  // opens 0.8s in (the panel is still until the drop); the grid's idle
+  // flicker between the reveal and the readout is cut from 5.5s to 1.8s
+  { type:'analyse', label:'Analyse', title:'Pixel scan, checks and readout',
+    formats:['portrait','square'], duration:8.3, shell:'s-mid', panels:['mid'],
+    T: t => (t < 8 ? t : t - 3.7) - .8 },
+  // opens 2.9s in: nothing in this panel moves before 3.5
+  { type:'deliver', label:'Deliver', title:'URL transforms crop the face',
+    formats:['portrait','square'], duration:7.6, shell:'s-out', panels:['out'],
+    T: t => t - 2.9 },
+];
+
+/* where the ambient blips may land, as % of the stage: [x0, x1, y0, y1],
+   always outside the shell */
+const SB_ZONES = {
+  full: [[1.2,4.6,16,84], [95.4,98.8,16,84], [10,90,4,12.5], [10,90,87.5,96]],
+  portrait: [[8,92,4.5,11.5], [1.2,4.2,16,76], [95.8,98.8,16,76]],
+  square: [[2.5,8.5,8,82], [91.5,97.5,8,82]],
+  landscape: [[1.2,4.6,10,90], [95.4,98.8,10,90]],
+};
+
+/* ---------------- Timeline ----------------
+   One score per card, in absolute seconds. Everything it schedules is owned
+   by it, so a restart is a single kill(). Under reduced motion it collapses to
+   its end state: tweens jump to their last keyframe, cues fire in order. */
+function Timeline({reduced=false}={}){
+  const timers=[], anims=[], cues=[], teardown=[];
+  let killed=false, played=false;
+  const styleOf = kf => { const o = {...kf}; delete o.easing; delete o.offset; delete o.composite; return o; };
+  const apply = (el, styles) => { if (el) Object.assign(el.style, styles); };
+  const api = {
+    at(t, fn){ cues.push([Math.max(0,t)*1000, fn]); return api; },
+    timeout(ms, fn){
+      if (killed) return api;
+      timers.push(setTimeout(()=>{ if (!killed) fn(); }, ms));
+      return api;
+    },
+    cls(el, name, t, on=true){ if (!el) return api; return api.at(t, ()=>el.classList.toggle(name, on)); },
+    set(el, styles, t=0){ if (!el) return api; return api.at(t, ()=>apply(el, styles)); },
+    to(el, kf, {dur=.4, at=0, ease=EASE.out, fill='both'}={}){
+      if (!el) return api;
+      const frames = Array.isArray(kf) ? kf : [kf];
+      if (reduced){ api.at(at, ()=>apply(el, styleOf(frames[frames.length-1]))); return api; }
+      api.at(0, ()=>{ anims.push(el.animate(frames, {duration:dur*1000, delay:at*1000, easing:ease, fill})); });
+      return api;
+    },
+    onKill(fn){ if (fn) teardown.push(fn); return api; },
+    play(){
+      if (killed || played) return api;
+      played = true;
+      const ordered = cues.slice().sort((a,b)=>a[0]-b[0]);
+      if (reduced){ ordered.forEach(([,fn])=>fn()); return api; }
+      ordered.forEach(([ms,fn])=>{
+        if (ms<=0) fn();
+        else timers.push(setTimeout(()=>{ if (!killed) fn(); }, ms));
+      });
+      return api;
+    },
+    kill(){
+      killed = true;
+      timers.forEach(clearTimeout); timers.length = 0;
+      anims.forEach(a=>{ try{ a.cancel(); }catch(e){} }); anims.length = 0;
+      teardown.forEach(fn=>{ try{ fn(); }catch(e){} }); teardown.length = 0;
+      cues.length = 0;
+      return api;
+    },
+  };
+  return api;
+}
+
+/* seeded PRNG (mulberry32): the grid and the blips each draw from their own,
+   so neither depends on how often anything else calls Math.random */
+function mulberry32(seed){
+  let s = seed >>> 0;
+  return ()=>{
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- the analysis grid ----------------
+   The site's pixel canvas: the photo downsampled to 20x26 flat squares. A cell
+   travels between colours in HSL with a saturation overshoot, so it blooms
+   mid-move instead of cross-fading flatly.
+
+   States: `idle` (dark — not uploaded yet), `reveal` (cells light in scan
+   order, flash bright and settle: the image materialising across the upload),
+   `processing` (three random cells flare every 100ms and fall back) and
+   `static` (everything settles to its true colour).
+
+   The booth deck's grid counted animation frames, so its pace depended on the
+   frame rate, and it started in `static`, which painted the finished picture
+   before the drop and left the reveal nothing to do. Here every event has a
+   timestamp — cell i of the reveal lights at a fixed offset, a flare fires
+   every 100ms, a flash falls back exactly `fade` ms later — and each frame
+   replays the events up to now in order. The same moment draws the same grid
+   at any frame rate, in a still or a video. Pacing is the site's at 60fps. */
+const PDX_LIT = [235,235,235];      // the flash a cell passes through
+const PDX_DARK = [12,12,12];
+const PDX_SAT_PEAK = 1.2;
+const PDX_REVEAL_SECS = 3;          // a full reveal at speed 1; the score runs it at 2
+const PDX_FRAME = 1000/60;          // the site's frame, which its pacing is counted in
+
+function pdxRgbToHsl(r,g,b){
+  r/=255; g/=255; b/=255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2;
+  if (mx===mn) return [0,0,l];
+  const d=mx-mn, s = l>.5 ? d/(2-mx-mn) : d/(mx+mn);
+  let h;
+  if (mx===r)      h=((g-b)/d + (g<b?6:0))/6;
+  else if (mx===g) h=((b-r)/d + 2)/6;
+  else             h=((r-g)/d + 4)/6;
+  return [h,s,l];
+}
+function pdxHslToRgb(h,s,l){
+  if (!s){ const v=Math.round(l*255); return [v,v,v]; }
+  const q = l<.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+  const ch = t => {
+    t = (t+1)%1;
+    if (t < 1/6) return p+(q-p)*6*t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  };
+  return [ch(h+1/3), ch(h), ch(h-1/3)].map(v=>Math.round(v*255));
+}
+function pdxMix(from, to, t){
+  const a = pdxRgbToHsl(from[0],from[1],from[2]);
+  const b = pdxRgbToHsl(to[0],to[1],to[2]);
+  let dh = b[0]-a[0];
+  if (dh >  .5) dh -= 1;
+  if (dh < -.5) dh += 1;
+  const bell = 4*t*(1-t);
+  const s = (a[1] + (b[1]-a[1])*t) * (1 + (PDX_SAT_PEAK-1)*bell);
+  return pdxHslToRgb(a[0]+dh*t, Math.min(1, s), a[2]+(b[2]-a[2])*t);
+}
+
+function createPixelGrid(canvas, src, {cols=20, rows=26, gap=.2, fade=200, seed=0x5eed}={}){
+  const ctx = canvas.getContext('2d');
+  const n = cols*rows;
+  const truth = new Array(n).fill(null);   // each cell's real colour
+  const from  = new Array(n).fill(null);   // where its current move started
+  const to    = new Array(n).fill(null);   // where it's heading (null: never sent)
+  const t0    = new Float64Array(n);       // when that move started
+  const rnd = mulberry32(seed);
+  const modes = [];                        // state changes, {mode, at, speed, instant}
+  let mi = 0, cur = {mode:'idle', at:0}, lit = 0, flares = 0;
+  const falls = []; let fh = 0;            // flashes waiting to fall back, in time order
+  let ready = false, dead = false, raf = 0;
+
+  const img = new Image();
+  img.onload = ()=>{
+    if (dead) return;
+    const off = document.createElement('canvas');
+    off.width = cols; off.height = rows;
+    const octx = off.getContext('2d', {willReadFrequently:true});
+    octx.drawImage(img, 0, 0, cols, rows);
+    const d = octx.getImageData(0, 0, cols, rows).data;
+    for (let i=0;i<n;i++) truth[i] = [d[i*4], d[i*4+1], d[i*4+2]];
+    ready = true;
+  };
+  img.src = src;
+
+  const sample = (i, now)=>{
+    if (!to[i]) return from[i] || PDX_DARK;
+    const p = (now - t0[i]) / fade;
+    if (p >= 1) return to[i];
+    return pdxMix(from[i] || PDX_DARK, to[i], Math.max(0, p));
+  };
+  const send = (i, target, at)=>{
+    from[i] = to[i] ? sample(i, at) : (from[i] || PDX_DARK);
+    to[i] = target; t0[i] = at;
+    if (target === PDX_LIT) falls.push([i, at]);
+  };
+  // the oldest flash still lit (a cell flared again since has a newer entry)
+  const nextFall = ()=>{
+    while (fh < falls.length){
+      const [i, at] = falls[fh];
+      if (to[i] === PDX_LIT && t0[i] === at) return falls[fh];
+      fh++;
+    }
+    return null;
+  };
+  const enter = m =>{
+    cur = m; lit = 0; flares = 0;
+    if (m.mode === 'reveal') m.per = Math.max(1, Math.ceil(n / (PDX_REVEAL_SECS*60/m.speed)));
+    if (m.mode === 'processing'){
+      m.step = Math.max(1, Math.round(6/m.speed)) * PDX_FRAME;
+      for (let i=0;i<n;i++) if (to[i] === null) send(i, truth[i], m.at);
+    }
+    if (m.mode === 'static') for (let i=0;i<n;i++){
+      if (m.instant){ from[i] = to[i] = truth[i]; t0[i] = m.at - fade; }
+      else if (to[i] !== truth[i]) send(i, truth[i], m.at);
+    }
+  };
+  // apply every event up to time T, earliest first
+  const advanceTo = T =>{
+    if (!ready) return;               // replayed from the start once the photo is in
+    for (;;){
+      let t = Infinity, kind = 0, f = null;
+      if (mi < modes.length){ t = modes[mi].at; kind = 1; }
+      if ((f = nextFall()) && f[1] + fade < t){ t = f[1] + fade; kind = 2; }
+      if (cur.mode === 'reveal' && lit < n){
+        const tt = cur.at + Math.floor(lit / cur.per) * PDX_FRAME;
+        if (tt < t){ t = tt; kind = 3; }
+      }
+      if (cur.mode === 'processing'){
+        const tt = cur.at + flares * cur.step;
+        if (tt < t){ t = tt; kind = 4; }
+      }
+      if (!kind || t > T) return;
+      if (kind === 1) enter(modes[mi++]);
+      else if (kind === 2){ fh++; send(f[0], truth[f[0]], t); }
+      else if (kind === 3){ const i = lit++; if (to[i] === null) send(i, PDX_LIT, t); }
+      else { flares++; for (let k=0;k<3;k++) send((rnd()*n)|0, PDX_LIT, t); }
+    }
+  };
+
+  // draw at the size the canvas is shown, so every square and gap lands on
+  // whole device pixels however far the card is scaled
+  const resize = ()=>{
+    const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    const w = Math.max(cols, Math.round(r.width*dpr)), h = Math.max(rows, Math.round(r.height*dpr));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+  };
+  const paint = now =>{
+    const W = canvas.width, H = canvas.height, cw = W/cols, chh = H/rows;
+    ctx.clearRect(0, 0, W, H);
+    for (let i=0;i<n;i++){
+      const c = sample(i, now), x = i % cols, y = (i / cols) | 0;
+      const x0 = Math.round(x*cw), y0 = Math.round(y*chh);
+      const x1 = Math.round((x+1-gap)*cw), y1 = Math.round((y+1-gap)*chh);
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fillRect(x0, y0, Math.max(1, x1-x0), Math.max(1, y1-y0));
+    }
+  };
+  const frame = ()=>{
+    if (dead) return;
+    const now = performance.now();
+    advanceTo(now);
+    if (ready) paint(now);
+    raf = requestAnimationFrame(frame);
+  };
+  resize();
+  raf = requestAnimationFrame(frame);
+
+  return {
+    setState(mode, {animationSpeed=1, instant=false}={}){
+      const at = performance.now();
+      advanceTo(at);
+      modes.push({mode, at, speed:animationSpeed, instant});
+    },
+    settle(){ this.setState('static', {instant:true}); },
+    resize,
+    destroy(){ dead = true; cancelAnimationFrame(raf); },
+  };
+}
+
+/* ---------------- ambient substrate ----------------
+   A blip every 0.7–1.6s, up to seven at once, kept a little apart so they
+   don't line up. Each one is removed by a timer at the end of its life rather
+   than on animationend, so placement never waits on event timing. */
+const SB_COLORS = ['#ffffff', '#b6b7ff', '#d8ff6e'];
+const SB_MAX = 7, SB_MIN_DX = 6, SB_MIN_DY = 9;
+
+function startSubstrate(tl, zones, seed=0xb1ab){
+  const field = document.getElementById('sbField');
+  field.textContent = '';
+  if (REDUCED || !zones || !zones.length) return;
+  const rnd = mulberry32(seed), r = (a,b)=>a + rnd()*(b-a);
+  const live = new Set();
+  const place = ()=>{
+    for (let i=0;i<8;i++){
+      const [x0,x1,y0,y1] = zones[(rnd()*zones.length)|0];
+      const x = r(x0,x1), y = r(y0,y1);
+      let clear = true;
+      for (const p of live) if (Math.abs(x-p.x) < SB_MIN_DX && Math.abs(y-p.y) < SB_MIN_DY){ clear = false; break; }
+      if (clear) return {x, y};
+    }
+    return null;
+  };
+  const spawn = ()=>{
+    if (live.size < SB_MAX){
+      const p = place();
+      if (p){
+        const life = r(2200,3400)|0;
+        const blip = document.createElement('i');
+        blip.className = 'sb-blip';
+        blip.style.cssText = `left:${p.x.toFixed(2)}%;top:${p.y.toFixed(2)}%;`
+                           + `--c:${SB_COLORS[(rnd()*SB_COLORS.length)|0]}`;
+        live.add(p);
+        field.appendChild(blip);
+        blip.animate([{opacity:0},{opacity:.8, offset:.14},{opacity:.7, offset:.82},{opacity:0}],
+                     {duration:life, easing:'linear', fill:'forwards'});
+        tl.timeout(life, ()=>{ live.delete(p); blip.remove(); });
+      }
+    }
+    tl.timeout(r(700,1600), spawn);
+  };
+  spawn();
+  tl.onKill(()=>{ field.textContent = ''; });
+}
+
+/* ---------------- markup ---------------- */
+const CURSOR_SVG = '<svg viewBox="0 0 13 18" fill="none" xmlns="http://www.w3.org/2000/svg">'
+  + '<path fill-rule="evenodd" clip-rule="evenodd" d="M1.88049 0.325859L12.3829 10.8508C13.7021 12.1738 12.7663 14.4314 10.8983 14.4314L6.57983 14.4301L3.48786 17.1676C2.13356 18.3653 0 17.4043 0 15.5953V1.10386C0 0.12165 1.18642 -0.369457 1.88049 0.325859Z" fill="white"/>'
+  + '<path fill-rule="evenodd" clip-rule="evenodd" d="M1.25 1.91528V15.5673C1.25 16.3065 2.12322 16.6998 2.67697 16.21L6.10344 13.1769L10.8642 13.1782C11.6284 13.1782 12.0117 12.2548 11.4717 11.7136L1.56446 1.78499C1.4492 1.66848 1.25 1.75117 1.25 1.91528Z" fill="black"/></svg>';
+const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">'
+  + '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>';
+const DOTS = '<div class="pd-dots" data-state="standby"><i></i><i></i><i></i></div>';
+/* the site's 8x8 pixel-ring spinner: 48 cells in a 78-unit box, gapped by a
+   mask so each square reads on its own, lit one at a time as work completes */
+const DONUT = (()=>{
+  const cells = [];
+  for (let y=0;y<8;y++) for (let x=0;x<8;x++){
+    const d = Math.hypot(x-3.5, y-3.5);
+    if (d > 1.7 && d < 4.4) cells.push([x*10, y*10]);
+  }
+  const rects = cells.map(([x,y])=>`<rect x="${x}" y="${y}" width="10" height="10" class="c"/>`).join('');
+  const holes = cells.map(([x,y])=>`M${x} ${y}h8v8h-8z`).join('');
+  return `<svg class="pd-donut" viewBox="0 0 78 78" aria-hidden="true">
+    <defs><mask id="pdGaps"><path d="${holes}" fill="#fff"/></mask></defs>
+    <g mask="url(#pdGaps)">${rects}</g></svg>`;
+})();
+
+const WASH = `<div class="pd-bgwrap"><div class="pd-bg"><img src="${MEDIA.photo}" alt=""></div></div>`;
+
+const CELL = {
+  up: ()=>`
+    <div class="pd-cell up">
+      <div class="pd-inner">
+        <div class="pd-cursor">
+          <div class="pd-cursor-thumb"><img src="${MEDIA.photo}" alt=""></div>
+          <div class="pd-cursor-ic">${CURSOR_SVG}</div>
+        </div>
+        <div class="pd-zone" data-state="idle">
+          <span class="pd-ph">Upload image</span>
+          <img class="pd-shot" src="${MEDIA.photo}" alt="">
+          <div class="pd-track"><div class="pd-fill"></div></div>
+          <div class="pd-ctl"><div class="pd-btn">${TRASH_ICON}</div></div>
+        </div>
+      </div>
+      <div class="pd-status"><i></i><span>Upload successful</span></div>
+    </div>`,
+  mid: ()=>`
+    <div class="pd-cell mid">
+      <div class="pd-pixel"><canvas width="100" height="130"></canvas></div>
+      <div class="pd-prog">
+        <div class="pd-prog-side">${DOTS}</div>
+        ${DONUT}
+        <div class="pd-prog-side">${DOTS}</div>
+      </div>
+      <div class="pd-analysis">${ANALYSIS.map(t=>`<p>${esc(t).replace(/\*(.+?)\*/g, '<b>$1</b>')}</p>`).join('')}</div>
+    </div>`,
+  out: ()=>`
+    <div class="pd-cell out">
+      <div class="pd-stage">
+        <img src="${MEDIA.photo}" alt=""><img src="${MEDIA.crop}" alt="">
+        <img src="${MEDIA.square}" alt=""><img src="${MEDIA.round}" alt="">
+      </div>
+      <div class="pd-url">
+        <p class="row bracket st">&lt;img src="</p>
+        <p class="row indent st"><span class="host">https://demo.ucarecd.net/</span></p>
+        <p class="row indent st"><span class="id">${esc(UUID)}</span><span class="dim">/</span></p>
+        ${TRANSFORMS.map(op=>`
+        <div class="tf"><p class="row indent"><span class="dim">-/</span><span class="op">${esc(op[0])}</span>${
+          op.slice(1).map(a=>`<span class="dim">/</span><span class="arg">${esc(a)}</span>`).join('')
+        }<span class="dim">/</span></p></div>`).join('')}
+        <p class="row bracket cl">" /&gt;</p>
+      </div>
+    </div>`,
+};
+
+function cardHTML(c){
+  if (c.shell === 'full'){
+    return `<div class="pd-shell full">${WASH}<div class="pd-grid">${CELL.up()}${CELL.mid()}${CELL.out()}</div></div>`;
+  }
+  const p = c.panels[0];
+  return `<div class="pd-shell solo ${c.shell}">${p === 'mid' ? WASH : ''}${CELL[p]()}</div>`;
+}
+
+/* the animated elements of whichever panels the card has */
+function lookup(root){
+  const q = s => root.querySelector(s), qa = s => [...root.querySelectorAll(s)];
+  return {
+    bg: q('.pd-bg'),
+    up: q('.pd-cell.up') && {
+      cursor: q('.pd-cursor'), zone: q('.pd-zone'), ph: q('.pd-ph'), shot: q('.pd-shot'),
+      track: q('.pd-track'), fill: q('.pd-fill'), ctl: q('.pd-ctl'), status: q('.pd-status'),
+    },
+    mid: q('.pd-cell.mid') && {
+      pixel: q('.pd-pixel'), canvas: q('.pd-pixel canvas'), dots: qa('.pd-dots'),
+      donut: qa('.pd-donut .c'), lines: qa('.pd-analysis p'),
+    },
+    out: q('.pd-cell.out') && {
+      stage: q('.pd-stage'), shots: qa('.pd-stage img'), statics: qa('.pd-url .st'),
+      tfs: qa('.pd-url .tf'), close: q('.pd-url .cl'),
+    },
+  };
+}
+
+/* ---------------- the score ---------------- */
+function score(tl, el, grid, T){
+  const {up, mid, out, bg} = el;
+
+  if (up){
+    // the drag and the drop
+    tl.at(T(.5), ()=>{ up.zone.dataset.state = 'active'; });
+    tl.to(up.cursor, [{transform:'translate(150px,180px)'},{transform:'translate(-45px,-58px)'}],
+          {at:T(.5), dur:1, ease:EASE.out});
+    tl.to(up.cursor, [{opacity:0},{opacity:1}], {at:T(.5), dur:.2});
+    // exits open on the visible state, so they fill forwards only — filling
+    // backwards would paint that first keyframe from t=0
+    tl.to(up.cursor, [{opacity:1, transform:'translate(-45px,-58px) scale(1)'},
+                      {opacity:0, transform:'translate(-45px,-58px) scale(.85)'}],
+          {at:T(DROP), dur:.3, fill:'forwards'});
+    tl.at(T(DROP), ()=>{ up.zone.dataset.state = 'idle'; });
+    tl.to(up.ph,    [{opacity:1},{opacity:0}], {at:T(DROP), dur:.3, fill:'forwards'});
+    tl.to(up.shot,  [{opacity:0},{opacity:1}], {at:T(DROP), dur:.8});
+    tl.to(up.track, [{opacity:0},{opacity:1}], {at:T(DROP), dur:.1});
+    tl.to(up.fill,  [{transform:'scaleX(0)'},{transform:'scaleX(1)'}], {at:T(DROP), dur:2, ease:'linear'});
+    // done: the bar clears and the file gets its controls
+    tl.to(up.track, [{opacity:1},{opacity:0}], {at:T(ANALYSE), dur:.3, fill:'forwards'});
+    tl.to(up.ctl,   [{opacity:0, transform:'translateY(-8px)'},{opacity:1, transform:'translateY(0)'}],
+          {at:T(ANALYSE), dur:.4});
+    tl.to(up.status, [{opacity:0},{opacity:1}], {at:T(STATUS), dur:.4});
+  }
+
+  if (mid){
+    tl.at(T(DROP), ()=>{
+      mid.dots[0].dataset.state = 'working';
+      grid.setState('reveal', {animationSpeed:2});
+    });
+    tl.to(mid.pixel, [{opacity:0},{opacity:1}], {at:T(DROP), dur:.4});
+    // the wash fills with the upload bar — one upload, two readouts
+    tl.to(bg, [{clipPath:'inset(0 0 100% 0)'},{clipPath:'inset(0 0 0% 0)'}], {at:T(DROP), dur:2, ease:EASE.out});
+    tl.at(T(ANALYSE), ()=>{
+      grid.setState('processing', {animationSpeed:1});
+      mid.dots[0].dataset.state = 'standby';
+      mid.dots[1].dataset.state = 'working';
+    });
+    // the verdict, a line at a time; the ring completes cell by cell, so
+    // "done" arrives as a fill rather than a flash
+    mid.lines.forEach((p,i)=>tl.to(p, [{opacity:0},{opacity:1}], {at:T(STATUS + i*.2), dur:.3}));
+    mid.donut.forEach((c,i)=>tl.cls(c, 'lit', T(DONUT_AT + i*.012)));
+    tl.at(T(SETTLE), ()=>{
+      grid.setState('static');
+      mid.dots[1].dataset.state = 'standby';
+    });
+  }
+
+  if (out){
+    // the plain file lands with its plain URL
+    tl.to(out.stage, [{opacity:0},{opacity:1}], {at:T(ANALYSE), dur:.6});
+    tl.to(out.shots[0], [{opacity:0, filter:'blur(20px)', transform:'scale(1.05)'},
+                         {opacity:1, filter:'blur(0px)',  transform:'scale(1)'}], {at:T(ANALYSE), dur:.6});
+    out.statics.forEach((p,i)=>tl.to(p, [{opacity:0},{opacity:1}], {at:T(ANALYSE + .1 + i*.05), dur:.4}));
+    // each transform writes itself in and the picture becomes what it says.
+    // The row grows from nothing to its line-height (a layout value, so it
+    // is right at any stage scale); the clip is only for the growth — held,
+    // it would trim the descenders.
+    [1.5, 3, 4.5].forEach((off, i)=>{
+      const at = T(ANALYSE + off);
+      tl.to(out.shots[i],   [{opacity:1, filter:'blur(0px)',  transform:'scale(1)'},
+                             {opacity:0, filter:'blur(20px)', transform:'scale(.95)'}], {at, dur:.6, fill:'forwards'});
+      tl.to(out.shots[i+1], [{opacity:0, filter:'blur(20px)', transform:'scale(1.05)'},
+                             {opacity:1, filter:'blur(0px)',  transform:'scale(1)'}], {at, dur:.6});
+      const h = parseFloat(getComputedStyle(out.tfs[i].firstElementChild).lineHeight);
+      tl.to(out.tfs[i], [{opacity:0, height:'0px'},{opacity:1, height:h+'px'}], {at, dur:.4});
+      tl.set(out.tfs[i], {overflow:'visible'}, at + .4);
+    });
+    // the tag closes once the last op is in: the URL is finished
+    tl.to(out.close, [{opacity:0},{opacity:1}], {at:T(ANALYSE + 5.1), dur:.4});
+  }
+}
+
+/* reduced motion: the end of the story, which is the point of the card */
+function finale(el, grid){
+  const {up, mid, out, bg} = el;
+  const set = (e, s)=>e && Object.assign(e.style, s);
+  set(bg, {clipPath:'inset(0 0 0% 0)'});
+  if (up){
+    set(up.shot, {opacity:'1'}); set(up.ph, {opacity:'0'});
+    set(up.ctl, {opacity:'1', transform:'none'}); set(up.status, {opacity:'1'});
+  }
+  if (mid){
+    set(mid.pixel, {opacity:'1'}); grid.settle();
+    mid.lines.forEach(p=>set(p, {opacity:'1'}));
+    mid.donut.forEach(c=>c.classList.add('lit'));
+  }
+  if (out){
+    set(out.stage, {opacity:'1'}); set(out.shots[3], {opacity:'1'});
+    out.statics.forEach(p=>set(p, {opacity:'1'})); set(out.close, {opacity:'1'});
+    out.tfs.forEach(d=>set(d, {opacity:'1', height:'auto', overflow:'visible'}));
+  }
+}
+
+/* ---------------- stage, playback, embed contract ---------------- */
+const stage = document.getElementById('stage');
+const FORMATS = ['landscape','portrait','square'];
+const Q = new URLSearchParams(location.search);
+const EMBED = Q.has('card');
+const HOLD = Q.has('hold');
+let cardIx = Math.min(CARDS.length-1, Math.max(0, parseInt(Q.get('card'), 10) || 0));
+let format = FORMATS.includes(Q.get('format')) ? Q.get('format') : CARDS[cardIx].formats[0];
+if (EMBED) document.body.classList.add('embed');
+stage.dataset.format = format;
+
+function fit(){
+  const s = Math.min(innerWidth/stage.offsetWidth, innerHeight/stage.offsetHeight);
+  stage.style.transform = `scale(${s})`;
+}
+addEventListener('resize', ()=>{ fit(); grid && grid.resize(); });
+fit();
+
+let tl = null, grid = null;
+
+function play(i){
+  if (tl) tl.kill();
+  cardIx = i;
+  const c = CARDS[i];
+  tl = new Timeline({reduced:REDUCED});
+
+  // a fresh element each time, so nothing of the last run carries over
+  const old = document.getElementById('card');
+  const root = document.createElement('div');
+  root.id = 'card';
+  root.innerHTML = cardHTML(c);
+  old.replaceWith(root);
+
+  const el = lookup(root);
+  if (el.mid){
+    grid = createPixelGrid(el.mid.canvas, MEDIA.photo);
+    tl.onKill(()=>{ grid.destroy(); grid = null; });
+  }
+  startSubstrate(tl, c.shell === 'full' ? SB_ZONES.full : SB_ZONES[format]);
+
+  tl.to(root, [{opacity:0},{opacity:1}], {dur:.65, ease:EASE.out});
+  if (REDUCED) finale(el, grid);
+  else score(tl, el, grid, c.T);
+  tl.play();
+  syncUI();
+}
+
+window.__deckInfo = ()=>CARDS.map((c,i)=>({
+  index:i, type:c.type, label:c.label, title:c.title, duration:c.duration, formats:[...c.formats],
+}));
+window.__deckStart = ()=>play(cardIx);
+window.__deckRestart = (card = cardIx)=>play(Math.min(CARDS.length-1, Math.max(0, card|0)));
+
+/* standalone picker: a card, a shape it comes in, replay */
+const ui = document.getElementById('ui');
+function syncUI(){
+  if (EMBED) return;
+  const c = CARDS[cardIx];
+  const name = {landscape:'16:9', portrait:'9:16', square:'1:1'};
+  ui.innerHTML = CARDS.map((k,i)=>`<button data-card="${i}" aria-pressed="${i===cardIx}">${i+1} · ${esc(k.label)}</button>`).join('')
+    + '<i></i>' + FORMATS.map(f=>`<button data-format="${f}" aria-pressed="${f===format}" ${c.formats.includes(f)?'':'disabled'}>${name[f]}</button>`).join('')
+    + '<i></i><button data-replay>Replay</button>';
+}
+ui.addEventListener('click', e=>{
+  const b = e.target.closest('button');
+  if (!b) return;
+  let i = cardIx;
+  if (b.dataset.card) i = +b.dataset.card;
+  if (b.dataset.format) format = b.dataset.format;
+  if (!CARDS[i].formats.includes(format)) format = CARDS[i].formats[0];
+  stage.dataset.format = format;
+  fit();
+  play(i);
+});
+
+// start the font now, so document.fonts.ready (which the renderer waits on
+// before __deckStart) covers it
+const fontReady = document.fonts.load('400 15px "Commit Mono"').catch(()=>{});
+if (!HOLD) fontReady.then(()=>requestAnimationFrame(()=>window.__deckStart()));
+</script>
+</body>
+</html>

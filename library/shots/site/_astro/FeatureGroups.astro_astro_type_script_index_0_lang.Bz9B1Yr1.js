@@ -1,0 +1,1 @@
+import{t as e}from"./detailsAccordion.CIIgDzNP.js";var t=Array.from(document.querySelectorAll(`.feature-groups .feature-group`));if(t.length){let n=window.matchMedia(`(max-width: 900px)`),r=e(t,{exclusive:!0,enabled:()=>n.matches});n.addEventListener(`change`,()=>{r?.reset(),t.forEach(e=>{e.open=!n.matches})})}
