@@ -99,7 +99,7 @@ export function createLibrary({ state, persist, modal }) {
       el('span', { class: 'lib-dur', text: `${c.duration}s` }),
     ]))));
     const total = cards.reduce((a, c) => a + c.duration, 0);
-    count.textContent = cards.length ? `${cards.length} cards · ${total}s` : '';
+    count.textContent = cards.length ? `${cards.length} cards · ${Math.round(total)}s` : '';
   }
 
   function sync() {
