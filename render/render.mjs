@@ -14,7 +14,8 @@
  *
  * Options: --card N (1-based) | --label "text" (a card whose label has it) | --all,
  * --format landscape|portrait|square|all,
- * --fps 30, --scale 1|2 (2 = 4K-class), --out <dir> (default ~/Downloads).
+ * --fps 30, --scale 1|2 (2 = 4K-class), --out <dir> (default ~/Downloads),
+ * --camera (the Camera look), --no-text (a Shots card's animation-only version).
  *
  * Layout checks: --stills 0.5,2,5 renders those moments (seconds) into one
  * labelled contact-sheet PNG instead of a video.
@@ -72,6 +73,7 @@ const slug = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]
 export async function renderCard({
   deck, card, format = 'landscape', fps = 30, scale = 1, out = join(homedir(), 'Downloads'),
   baseUrl, browser: sharedBrowser, onProgress = () => {}, onStatus = () => {}, signal, stills, camera = false, label,
+  text = true,
 }) {
   if (!isDeck(deck)) throw new Error(`Unknown deck "${deck}"`);
   if (!FORMATS[format]) throw new Error(`Unknown format "${format}"`);
@@ -94,9 +96,11 @@ export async function renderCard({
     });
     const net = watchNetwork(page);
     // camera: the card plays in its 16:9 layout inside library/camera.html, filmed in perspective
+    // text: false plays a Shots card's animation-only version, where it has one
+    const extra = text ? '' : '&text=0';
     const url = () => camera
-      ? `${baseUrl}/library/camera.html?deck=${deck}&card=${card}&format=${format}&hold`
-      : `${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold`;
+      ? `${baseUrl}/library/camera.html?deck=${deck}&card=${card}&format=${format}&hold${extra}`
+      : `${baseUrl}/library/${deck}/deck.html?card=${card}&format=${format}&hold${extra}`;
     await page.goto(url(), { waitUntil: 'load' });
     // by label: look it up in the deck as loaded (its card list may have changed since the caller looked)
     const found = label && await page.evaluate((l) => window.__deckInfo().findIndex((c) => c.label.toLowerCase().includes(l)), label.toLowerCase());
@@ -124,7 +128,7 @@ export async function renderCard({
     await enc.goto(`${baseUrl}/render/encoder.html`, { waitUntil: 'load' });
     await enc.waitForFunction(() => window.encoderReady);
 
-    if (stills) return await contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera });
+    if (stills) return await contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera, plain: !text && info.plain });
     const method = await enc.evaluate((o) => window.startEncoder(o), { width, height, fps, bitsPerPixel: camera ? 0.38 : 0.18 });
 
     const frames = Math.max(1, Math.round(info.duration * fps));
@@ -144,7 +148,8 @@ export async function renderCard({
     onStatus('Finishing MP4');
     const bytes = Buffer.from(await enc.evaluate((n) => window.finishEncoder(n), frames), 'base64');
 
-    const name = `uc-${deck}-${String(card + 1).padStart(2, '0')}-${slug(info.label.replace(/^Expo · /, ''))}${camera ? '-camera' : ''}-${width}x${height}.mp4`;
+    const plain = !text && info.plain ? '-no-text' : '';
+    const name = `uc-${deck}-${String(card + 1).padStart(2, '0')}-${slug(info.label.replace(/^Expo · /, ''))}${plain}${camera ? '-camera' : ''}-${width}x${height}.mp4`;
     mkdirSync(out, { recursive: true });
     const file = join(out, name);
     writeFileSync(file, bytes);
@@ -193,7 +198,7 @@ async function advance(page, ms) {
 }
 
 /** Renders `stills` (seconds) and tiles them into one labelled PNG. */
-async function contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera }) {
+async function contactSheet({ page, net, enc, deck, card, format, info, stills, out, width, height, camera, plain }) {
   const shots = [];
   // step through at 30 fps, as a video would: a cursor's hovers on the way there count
   let now = 0;
@@ -227,7 +232,7 @@ async function contactSheet({ page, net, enc, deck, card, format, info, stills, 
     return c.toDataURL('image/png').split(',')[1];
   }, { shots, stills, cols, width, height });
   mkdirSync(out, { recursive: true });
-  const file = join(out, `sheet-${deck}-${String(card + 1).padStart(2, '0')}-${format}${camera ? '-camera' : ''}.png`);
+  const file = join(out, `sheet-${deck}-${String(card + 1).padStart(2, '0')}-${format}${plain ? '-no-text' : ''}${camera ? '-camera' : ''}.png`);
   writeFileSync(file, Buffer.from(png, 'base64'));
   return { file, name: file.split('/').pop(), card: info };
 }
@@ -240,6 +245,7 @@ async function cli(argv) {
     const [k, v] = [argv[i].replace(/^--/, ''), argv[i + 1]];
     if (k === 'all') opt.all = true;
     else if (k === 'camera') opt.camera = true;
+    else if (k === 'no-text') opt.noText = true;
     else { opt[k] = v; i++; }
   }
   if (!opt.deck) throw new Error('Usage: node render/render.mjs --deck <deck> (--card N | --label text | --all) [--format landscape|portrait|square|all] [--fps 30] [--scale 1|2] [--out dir]');
@@ -264,7 +270,7 @@ async function cli(argv) {
       const stills = opt.stills ? String(opt.stills).split(',').map(Number) : undefined;
       const r = await renderCard({
         deck: opt.deck, card, format, fps: Number(opt.fps), scale: Number(opt.scale), out: resolve(opt.out),
-        baseUrl, browser, stills, camera: !!opt.camera, label: byLabel ? String(opt.label) : undefined,
+        baseUrl, browser, stills, camera: !!opt.camera, label: byLabel ? String(opt.label) : undefined, text: !opt.noText,
         onProgress: (p) => { const pct = Math.floor(p * 10); if (pct !== last) { last = pct; process.stdout.write(`\r  card ${card + 1} ${format}: ${pct * 10}%`); } },
       });
       if (stills) { console.log(`  ${r.file}`); continue; }

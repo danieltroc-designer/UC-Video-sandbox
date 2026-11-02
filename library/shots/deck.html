@@ -13,11 +13,16 @@
   virtual mouse: real pointer/mouse events for the site's own hover handlers,
   plus a `.uc-hover` class that the mirrored CSS treats like `:hover`. Views
   are keyframed per shape, and can follow the cursor, which is how the
-  vertical cuts zoom in and track the action. A card can also play a card of
-  another deck (the rebuilt homepage demo). Cards live in cards.js.
+  vertical cuts zoom in and track the action. The cursor itself isn't drawn
+  (the shots are about the animation; `&cursor` shows it). A card can also
+  play a card of another deck (the rebuilt homepage demo). Cards live in
+  cards.js.
 
   Same embed contract as the other decks:
-    deck.html?card=N&format=landscape|portrait|square[&hold]
+    deck.html?card=N&format=landscape|portrait|square[&hold][&text=0]
+
+  `text=0` plays a card's "animation only" version, where it has one
+  (`plain` in cards.js): its copy hidden, and framed without it.
     window.__deckInfo() / __deckStart() / __deckRestart(card)
 
   Everything runs on performance.now(), so the renderer's virtual clock drives
@@ -60,6 +65,8 @@
   const FORMATS = { landscape: [1920, 1080], portrait: [1080, 1920], square: [1080, 1080] };
   const q = new URLSearchParams(location.search);
   const hold = q.has('hold');
+  const textOff = q.get('text') === '0';
+  const showCursor = q.has('cursor');
   let cardIx = Math.min(CARDS.length - 1, Math.max(0, parseInt(q.get('card'), 10) || 0));
   const format = FORMATS[q.get('format')] ? q.get('format') : 'landscape';
   const [W, H] = FORMATS[format];
@@ -84,10 +91,12 @@
   let card = null;
   let t0 = null;      // start time, null until started
   let ready = null;   // resolves when the card can start
+  let plain = null;   // the card's animation-only version, when that's what plays
 
   function build(i) {
     cardIx = i;
     card = CARDS[i];
+    plain = textOff ? card.plain ?? null : null;
     frame?.remove();
     t0 = null;
     frame = document.createElement('iframe');
@@ -123,7 +132,8 @@
       html { scroll-behavior: auto !important; }
       * { caret-color: transparent !important; }
       ${only ? `body { visibility: hidden; } ${only.map((sel) => `${sel}, ${sel} *`).join(', ')} { visibility: visible; }` : ''}
-      ${card.css ?? ''}`;
+      ${card.css ?? ''}
+      ${plain ? `${plain.hide.map((sel) => `${sel}, ${sel} *`).join(', ')} { visibility: hidden !important; } ${plain.css ?? ''}` : ''}`;
     doc.head.append(style);
     const target = doc.querySelector(card.target);
     if (!target) throw new Error(`Shots: no ${card.target} on ${card.page}`);
@@ -232,6 +242,7 @@
         x = Math.min(...rs.map((r) => r.left)); y = Math.min(...rs.map((r) => r.top));
         w = Math.max(...rs.map((r) => r.right)) - x; h = Math.max(...rs.map((r) => r.bottom)) - y;
       }
+      if (plain && !v.rect) [x, y, w, h] = trimText(x, y, w, h);
       const pad = v.pad ?? 48;
       cx = x + w / 2 + (v.dx ?? 0); cy = y + h / 2 + (v.dy ?? 0);
       s = (v.cover ? Math.max : Math.min)(W / (w + 2 * pad), H / (h + 2 * pad));
@@ -246,8 +257,20 @@
     return { cx, cy, s };
   }
 
+  // Animation only: hidden copy along the top or bottom edge of a framed box
+  // comes out of the box too, so the close-up tightens on what moves.
+  function trimText(x, y, w, h) {
+    for (const el of plain.hide.flatMap((sel) => [...mouse.doc.querySelectorAll(sel)])) {
+      const r = el.getBoundingClientRect();
+      if (!r.height || r.right < x || r.left > x + w || r.bottom < y || r.top > y + h) continue;
+      if (r.top > y + h * 0.4 && r.bottom > y + h * 0.75) h = r.top - y;              // along the bottom
+      else if (r.bottom < y + h * 0.6 && r.top < y + h * 0.25) { h -= r.bottom - y; y = r.bottom; } // along the top
+    }
+    return [x, y, w, h];
+  }
+
   function viewAt(t) {
-    const list = card.views?.[format] ?? [{ t: 0, el: card.target }];
+    const list = (plain?.views ?? card.views)?.[format] ?? [{ t: 0, el: card.target }];
     let i = 0;
     while (i < list.length - 1 && t >= list[i + 1].t) i++;
     const cur = viewOf(list[i], t);
@@ -291,9 +314,9 @@
       mouse.move(Math.round(p.x * 100) / 100, Math.round(p.y * 100) / 100);
       const sx = W / 2 + (p.x - v.cx) * v.s, sy = H / 2 + (p.y - v.cy) * v.s;
       cursorEl.style.transform = `translate(${sx - 6}px, ${sy - 3}px)`;
-      cursorEl.style.opacity = t0 == null ? 0 : 1;
+      cursorEl.style.opacity = showCursor && t0 != null ? 1 : 0;
       const rk = ringAt < 0 ? 1 : (t - ringAt) / 0.45;
-      ring.style.opacity = rk < 1 ? 1 - rk : 0;
+      ring.style.opacity = showCursor && rk < 1 ? 1 - rk : 0;
       ring.style.transform = `translate(${sx}px, ${sy}px) scale(${0.4 + 0.8 * clamp01(rk)})`;
     }
   }
@@ -322,7 +345,7 @@
 
   window.__deckInfo = () => CARDS.map((c, index) => ({
     index, type: c.kind, label: c.label, title: c.title, duration: c.duration,
-    formats: c.formats ?? Object.keys(FORMATS),
+    formats: c.formats ?? Object.keys(FORMATS), plain: !!c.plain,
   }));
   window.__deckStart = start;
   // a site card restarts by reloading its page, so its animations start over too

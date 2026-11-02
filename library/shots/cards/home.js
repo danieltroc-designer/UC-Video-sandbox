@@ -50,6 +50,26 @@ const hero = [
     kind: 'site', page: 'home', label: 'Home · Hero',
     title: 'The globe fades in, uploads and requests pop up around it, and the highlight follows the cursor',
     duration: 12, target: 'section.hero',
+    // animation only: no headline, copy or buttons (the pixel donut stays);
+    // the close-ups start and break on the donut instead of the headline
+    plain: {
+      hide: ['.hero__head', '.hero__body'],
+      views: {
+        landscape: [{ t: 0, el: 'section.hero', pad: 40 }],
+        portrait: [
+          { t: 0, el: '.hero__donut', pad: 150 },
+          { t: 2.0, ...REQUEST, dur: 1.0 },
+          { t: 4.7, el: '.hero__donut', pad: 150, dur: 0.8 },
+          { t: 5.3, ...UPLOAD, dur: 1.1 },
+        ],
+        square: [
+          { t: 0, el: '.hero__donut', pad: 190 },
+          { t: 2.0, ...REQUEST, dur: 1.0 },
+          { t: 4.7, el: '.hero__donut', pad: 190, dur: 0.8 },
+          { t: 5.3, ...UPLOAD, dur: 1.1 },
+        ],
+      },
+    },
     actions: [{ t: 0, call: smilOnPageClock('svg.hero__earth') }],
     cursorFrom: [760, 690],
     cursor: [
@@ -81,6 +101,9 @@ const hero = [
 
 // ------------------------------------------------------------------ bento
 
+// animation only: the cards without their title and description
+const PLAIN = { hide: ['.bento .card__text'] };
+
 const UPLOADER = '.card.uploader-card';
 const COMPARE = '.card.compare';
 const URL_API = '.card.url-api';
@@ -108,7 +131,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · Bento tour',
     title: 'The cursor hovers each platform card in turn, and each one comes alive',
-    duration: 12, target: 'section.bento', viewport: [1440, 1120],
+    duration: 12, target: 'section.bento', viewport: [1440, 1120], plain: PLAIN,
     // in from the top, then neighbour to neighbour, so no card is crossed on the way:
     // compare (sweep 0.4–3.0), uploader, URL API (two turns), video (SD → 4K), webhooks
     cursorFrom: [1100, -60],
@@ -142,7 +165,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · Uploader card',
     title: 'Hovered, the file slides toward the drop zone and it lights up',
-    duration: 5.5, target: UPLOADER,
+    duration: 5.5, target: UPLOADER, plain: PLAIN,
     cursorFrom: [560, 960],
     cursor: [
       { t: 1.4, to: '.source-modal__dropzone', at: [0.62, 0.62], move: 1.0 },
@@ -153,7 +176,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · Image compare',
     title: 'Hovered, the JPEG/AVIF split sweeps left, right and back',
-    duration: 5, target: COMPARE,
+    duration: 5, target: COMPARE, plain: PLAIN,
     // hovered from 0.57 s; the sweep takes 2.55 s
     cursorFrom: [1150, 960],
     cursor: [
@@ -165,7 +188,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · URL API',
     title: 'Hovered, the operation wheel turns and each op slots into the URL',
-    duration: 5.4, target: URL_API,
+    duration: 5.4, target: URL_API, plain: PLAIN,
     // hovered from 0.63 s; one 4 s turn of the wheel, out while it rests back on rotate (4.2–4.6)
     cursorFrom: [420, 960],
     cursor: [
@@ -177,7 +200,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · Adaptive video',
     title: 'Hovered, the video plays and steps up from SD to 4K',
-    duration: 5, target: ABR,
+    duration: 5, target: ABR, plain: PLAIN,
     // hovered from 0.57 s: SD, HD 1.5, FHD 2.4, 4K 3.3; out at 3.9, before it drops back to SD
     cursorFrom: [840, 960],
     cursor: [
@@ -189,7 +212,7 @@ const bento = [
   {
     kind: 'site', page: 'home', label: 'Home · Webhooks and storage',
     title: 'Hovered, the storage boxes drop into a stack, flash, and the logo on top sparkles',
-    duration: 6.6, target: WEBHOOKS,
+    duration: 6.6, target: WEBHOOKS, plain: PLAIN,
     // hovered from 0.6 s; out at 5.5, and the stack lifts back
     cursorFrom: [1260, 960],
     cursor: [

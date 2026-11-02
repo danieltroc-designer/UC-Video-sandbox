@@ -44,6 +44,7 @@ export const DEFAULTS = {
   // Shots: uploadcare.com's animations, the same panel fixed on library/shots
   shotsCard: 0,
   shotsFormat: 'portrait',
+  shotsText: false, // false: the animation only, for cards that have that version
 
   // Content
   title: 'The infrastructure\nbehind every file',

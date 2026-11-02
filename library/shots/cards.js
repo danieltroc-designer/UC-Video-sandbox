@@ -9,6 +9,8 @@
 //     actions     { t, scroll: px, dur } or { t, call(doc, win) }
 //     css         extra styles for the page (hide what's in the way)
 //     isolate     selectors to keep visible (default: target); false shows the whole page
+//     plain       the "animation only" version (?text=0): { hide: [selectors], css, views };
+//                 the hidden copy is trimmed out of framed boxes where it runs along an edge
 //   kind: 'deck'  a card of another Library deck, played as is
 //
 // Times are seconds into the card. Views default to framing `target`.

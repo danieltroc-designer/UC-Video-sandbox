@@ -4,7 +4,7 @@
  * shows how to export locally instead).
  *
  *   GET  /api/health              -> { render: true, chrome }
- *   POST /api/render  {deck, card, format, fps, scale, camera}  -> { id }
+ *   POST /api/render  {deck, card, format, fps, scale, camera, text}  -> { id }
  *   GET  /api/render/:id          -> { state, progress, status, result | error }
  *   GET  /api/render/:id/file     -> the MP4 (also saved to ~/Downloads)
  *   DELETE /api/render/:id        -> cancel
@@ -98,6 +98,7 @@ export async function handle(req, res, { baseUrl }) {
       fps: [24, 25, 30, 50, 60].includes(Number(body.fps)) ? Number(body.fps) : 30,
       scale: Number(body.scale) === 2 ? 2 : 1,
       camera: body.camera === true,
+      text: body.text !== false,
     };
     if (!isDeck(request.deck) || !FORMATS[request.format] || !(request.card >= 0)) {
       return json(res, 400, { error: 'Unknown deck, card or format' });

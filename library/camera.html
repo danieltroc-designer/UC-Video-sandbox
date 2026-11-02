@@ -12,7 +12,7 @@
   frame can be any shape, which is what turns a wide booth card into a vertical
   close-up.
 
-    camera.html?deck=ecommerce-expo&card=0&format=portrait[&shot=name][&hold]
+    camera.html?deck=ecommerce-expo&card=0&format=portrait[&shot=name][&hold][&text=0]
 
   Time comes from performance.now(), so the renderer's virtual clock drives the
   camera exactly like it drives the deck in the iframe. The film is laid out at
@@ -88,7 +88,7 @@
   const sheen = document.getElementById('sheen');
 
   // The card plays in its original landscape layout; the camera does the framing.
-  screen.src = `${deck}/deck.html?card=${card}&format=landscape${hold ? '&hold' : ''}`;
+  screen.src = `${deck}/deck.html?card=${card}&format=landscape${hold ? '&hold' : ''}${q.get('text') === '0' ? '&text=0' : ''}`;
 
   let shot = null;
   let t0 = null;

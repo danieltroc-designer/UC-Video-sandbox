@@ -193,6 +193,15 @@ const bento = [
     kind: 'site', page: 'file-uploader', label: 'Uploader · Sources',
     title: 'The sources ticker rolls from device to camera, Dropbox, Drive and Photos',
     duration: 9.2, target: SOURCES, isolate: false, css: only(SOURCES),
+    // animation only: just the ticker, framed whole in every shape
+    plain: {
+      hide: [`${SOURCES} .up-bento__text`],
+      views: {
+        landscape: [{ t: 0, el: SOURCES, pad: 60, clamp: false }],
+        portrait: [{ t: 0, el: SOURCES, pad: 20, clamp: false }],
+        square: [{ t: 0, el: SOURCES, pad: 30, clamp: false }],
+      },
+    },
     views: {
       // clamp: false keeps the card centred though it sits at the page's left edge
       landscape: [{ t: 0, el: [`${SOURCES} .up-bento__text`, '.sources-art__label'], pad: 60, clamp: false }],
@@ -207,6 +216,7 @@ const bento = [
     // the scene loops 4.08 s after the hover starts (at ~0.85 s): this ends on
     // the settled crop it started on
     duration: 4.8, target: EDITOR, isolate: false, css: only(EDITOR),
+    plain: { hide: [`${EDITOR} .up-bento__text`] },
     actions: [{ t: 0, call: cssFor({ portrait: NO_HEADING, square: NO_HEADING }) }],
     cursorFrom: [1100, 980],
     cursor: [

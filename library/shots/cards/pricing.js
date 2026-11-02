@@ -6,21 +6,16 @@ const planTop = (n) => [plan(n, '.plan-card__head'), plan(n, '.cta')];
 export default [
   {
     kind: 'site', page: 'pricing', label: 'Pricing · Plans',
-    title: 'The cursor runs across the plans, then switches to monthly',
+    title: 'Each plan lights up in turn, then the prices switch to monthly',
     duration: 11, target: '.plans__grid', isolate: ['.plans'],
     // prices and buttons; the feature lists stay out of it
     css: '.plan-card__concept, .plan-card__features { display: none !important; }',
-    cursor: [
-      { t: 1.2, to: plan(1, '.plan-card__price'), move: 0.9 },
-      { t: 2.0, to: plan(1, '.cta'), move: 0.5 },
-      { t: 3.1, to: plan(2, '.plan-card__price') },
-      { t: 3.9, to: plan(2, '.cta'), move: 0.5 },
-      { t: 5.0, to: plan(3, '.plan-card__price') },
-      { t: 5.8, to: plan(3, '.cta'), move: 0.5 },
-      { t: 6.9, to: plan(4, '.plan-card__price') },
-      { t: 7.7, to: plan(4, '.cta'), move: 0.5 },
-      { t: 8.9, to: '#billing-period-tab-monthly', move: 0.8, click: true },
-    ],
+    // the (unseen) pointer rests on each plan's name, price and description,
+    // drifting a little across it, never on the buttons
+    cursor: [1, 2, 3, 4].flatMap((n, i) => [
+      { t: 1.2 + i * 1.9, to: plan(n, '.plan-card__head'), at: [0.35, 0.5], move: i ? 0.7 : 0.9 },
+      { t: 2.4 + i * 1.9, to: plan(n, '.plan-card__head'), at: [0.6, 0.62], move: 1.1 },
+    ]).concat({ t: 8.9, to: '#billing-period-tab-monthly', move: 0.8, click: true }),
     views: {
       landscape: [{ t: 0, el: ['.plans__toggle', ...planTop(1), ...planTop(4)], pad: 70 }],
       portrait: [

@@ -21,6 +21,8 @@ The animations on uploadcare.com, one card per component, in the studio's **Shot
 - **The cursor** is a list of waypoints: it glides to `to` (a selector, with `at` as a fraction of its box, or `[x, y]` in page px) and arrives at `t` after `move` seconds; `click: true` clicks there.
   - The player turns the cursor position into a virtual mouse: real `pointer*`/`mouse*` over/enter/move/leave/out events at the element under it, plus a `.uc-hover` class on it and its ancestors.
   - The mirror rewrote every CSS `:hover` to also match `.uc-hover`. So hover styles and hover handlers both work, in the preview and in renders.
+- The cursor itself is never drawn: the shots are about the animation. Add `&cursor` to a deck URL to see it while authoring.
+- **Animation only.** A card with `plain: { hide: [selectors], css, views }` also comes without its copy (the Shots tab's Text option, `?text=0`, `--no-text` on the CLI). The hidden copy is trimmed out of framed boxes where it runs along their top or bottom edge, so close-ups tighten on the animation. The hero and the bento cards have one.
 - **Views** say what the stage frames, per shape: `{ t, el, pad, cover, zoom, dx, dy, dur }`. From `t`, the stage eases over `dur` seconds to frame `el` (one selector or a list; their union).
   - `cover: true` fills the frame and crops; the default fits the whole box.
   - `{ cursor: true, w }` follows the cursor, with `w` page px across.

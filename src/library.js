@@ -73,6 +73,10 @@ export function createLibrary({ state, persist, modal }) {
   const lookSeg = el('div', { class: 'segmented' }, [['flat', 'Flat'], ['camera', 'Camera']].map(([look, label]) =>
     el('button', { type: 'button', 'data-look': look, text: label, onclick: () => selectCamera(look === 'camera') })));
   const lookHint = el('p', { class: 'hint' });
+  // Shots only: the site's copy, or just the animation (cards that have that version)
+  const textSeg = el('div', { class: 'segmented' }, [['plain', 'Animation only'], ['text', 'With text']].map(([v, label]) =>
+    el('button', { type: 'button', 'data-text': v, text: label, onclick: () => selectText(v === 'text') })));
+  const textHint = el('p', { class: 'hint' });
   const scaleSeg = el('div', { class: 'segmented' }, [[1, '1080p'], [2, '4K']].map(([k, label]) =>
     el('button', { type: 'button', 'data-scale': k, text: label, onclick: () => { state.libScale = k; persist(); sync(); } })));
   const exportOne = el('button', { class: 'btn primary', type: 'button', text: 'Export card', onclick: () => exportCards([at.card]) });
@@ -83,6 +87,7 @@ export function createLibrary({ state, persist, modal }) {
     el('div', { class: 'field-head' }, [el('span', { class: 'field-label', text: label }), extra]), ...body]);
   const title = el('span', { text: 'Library' });
   const deckField = field('Deck', null, deckSeg);
+  const textField = field('Text', null, textSeg, textHint);
   panel.append(el('details', { class: 'section', open: true }, [
     el('summary', {}, [title]),
     el('div', { class: 'section-body' }, [
@@ -90,6 +95,7 @@ export function createLibrary({ state, persist, modal }) {
       field('Cards', count, list),
       field('Format', null, formatSeg, formatHint),
       field('Look', null, lookSeg, lookHint),
+      textField,
       field('Quality', null, scaleSeg),
       el('div', { class: 'lib-actions' }, [exportOne, exportAll]),
       exportHint,
@@ -136,6 +142,11 @@ export function createLibrary({ state, persist, modal }) {
       : card && !card.formats.includes('landscape') ? `${cardName(card)} has no 16:9 layout to film, so it plays flat.`
       : 'Filmed on an angled screen: hard cuts to each beat, a slow drift, depth of field and grain.';
     exportAll.textContent = `Export all ${exportable().length}`;
+    textField.hidden = !shots;
+    for (const b of textSeg.children) b.classList.toggle('is-active', (b.dataset.text === 'text') === state.shotsText);
+    textHint.textContent = !card ? '' : card.plain
+      ? (state.shotsText ? 'The card as on the site, copy included.' : 'The card without its title and copy: just the animation.')
+      : `${cardName(card)} plays as on the site: its text is part of the animation.`;
     for (const b of scaleSeg.children) b.classList.toggle('is-active', Number(b.dataset.scale) === state.libScale);
     const f = LIB_FORMATS[at.format];
     const size = `${f.w * state.libScale}×${f.h * state.libScale}`;
@@ -150,7 +161,8 @@ export function createLibrary({ state, persist, modal }) {
     const { card, format } = at;
     // before the deck's first load the cards aren't known yet: go by the setting, and correct it on load
     const camera = cards[card] ? filmed(cards[card]) : state.libCamera;
-    return camera ? `library/camera.html?deck=${deck()}&card=${card}&format=${format}` : `library/${deck()}/deck.html?card=${card}&format=${format}`;
+    const text = shots && !state.shotsText ? '&text=0' : '';
+    return camera ? `library/camera.html?deck=${deck()}&card=${card}&format=${format}${text}` : `library/${deck()}/deck.html?card=${card}&format=${format}${text}`;
   };
 
   function load() {
@@ -202,7 +214,7 @@ export function createLibrary({ state, persist, modal }) {
     sync();
     // same deck and stage shape: switch in place, no reload
     const w = frame.contentWindow;
-    if (w?.__deckRestart && loadedSrc.startsWith(`library/${deck()}/`) && loadedSrc.endsWith(`format=${at.format}`)) {
+    if (w?.__deckRestart && loadedSrc.startsWith(`library/${deck()}/`) && loadedSrc.includes(`format=${at.format}`)) {
       w.__deckRestart(i);
       loadedSrc = srcFor();
       startedAt = performance.now();
@@ -214,6 +226,13 @@ export function createLibrary({ state, persist, modal }) {
     // …and a shape the current card doesn't come in switches to the first card that does
     const card = cards[at.card];
     if (card && !has(card, id)) at.card = (cards.find((c) => has(c, id)) ?? card).index;
+    persist();
+    load();
+    sync();
+  }
+
+  function selectText(on) {
+    state.shotsText = on;
     persist();
     load();
     sync();
@@ -290,7 +309,7 @@ export function createLibrary({ state, persist, modal }) {
         modal.status(`${prefix}${name} — starting`);
         const { id } = await request('/api/render', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deck: deck(), card, format, fps, scale, camera: camera[card] }),
+          body: JSON.stringify({ deck: deck(), card, format, fps, scale, camera: camera[card], text: !shots || state.shotsText }),
         });
         job.id = id;
         for (;;) {

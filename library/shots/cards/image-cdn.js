@@ -201,13 +201,15 @@ const dials = [
 // in the tour.
 
 const bentoBase = { kind: 'site', page: 'image-cdn', viewport: [1440, 1080] };
+// animation only: the cards without their title and description
+const PLAIN = { hide: ['.proc-bento__text'] };
 const card = (name) => `.proc-bento__${name}-card`;
 
 const bento = [
   {
     ...bentoBase, label: 'Image CDN · Bento tour',
     title: 'The cursor hovers each card of the processing bento in turn',
-    duration: 12, target: '.proc-bento',
+    duration: 12, target: '.proc-bento', plain: PLAIN,
     cursorFrom: [400, 1140],
     cursor: [
       { t: 1.0, to: card('url'), at: [0.62, 0.42], move: 1.0 },
@@ -253,7 +255,7 @@ const bento = [
   {
     ...bentoBase, label: 'Image CDN · Ops marquee',
     title: 'Hovering the operations card sets its four rows of pills scrolling',
-    duration: 8, target: card('ops'), isolate: [card('ops')],
+    duration: 8, target: card('ops'), isolate: [card('ops')], plain: PLAIN,
     cursorFrom: [700, 1140],
     cursor: [
       { t: 1.2, to: card('ops'), at: [0.45, 0.42], move: 1.1 },
@@ -272,7 +274,7 @@ const bento = [
   {
     ...bentoBase, label: 'Image CDN · Variant fan',
     title: 'Hovering the variants card fires pulses down the branches on both sides',
-    duration: 8, target: card('fan'), isolate: [card('fan')],
+    duration: 8, target: card('fan'), isolate: [card('fan')], plain: PLAIN,
     cursorFrom: [1036, 1140],
     cursor: [
       { t: 1.0, to: card('fan'), at: [0.62, 0.5], move: 1.0 },
