@@ -35,7 +35,9 @@ const diff = (obj, base) => Object.fromEntries(Object.entries(obj).filter(([k, v
 
 const saved = readStore();
 const state = { ...DEFAULTS, ...lookOf(saved.values.bgPreset), ...saved.values };
-if (!['intro', 'outro', 'mascot', 'library'].includes(state.mode)) state.mode = DEFAULTS.mode;
+if (!['intro', 'outro', 'mascot', 'library', 'shots'].includes(state.mode)) state.mode = DEFAULTS.mode;
+// Library and Shots both play decks in the Library panel instead of drawing on the canvas
+const isLibrary = () => state.mode === 'library' || state.mode === 'shots';
 // What sliders reset to and what counts as "changed": the defaults, with the
 // active background's own look.
 const defaults = { ...DEFAULTS, ...lookOf(state.bgPreset) };
@@ -140,7 +142,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (state.mode === 'library') { requestAnimationFrame(frame); return; } // the Library previews in its iframe
+  if (isLibrary()) { requestAnimationFrame(frame); return; } // the Library previews in its iframe
   if (playing && !scrubbing) {
     time += dt;
     if (time >= duration) {
@@ -417,11 +419,11 @@ function syncMode() {
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-checked', String(on));
   }
-  const lib = state.mode === 'library';
+  const lib = isLibrary();
   document.body.classList.toggle('mode-library', lib);
   $('#format').value = state[formatKey()];
   if (lib) setPlaying(false);
-  library?.setActive(lib);
+  library?.setActive(lib, state.mode === 'shots');
 }
 
 // The export dialog, shared by the canvas export and Library renders.
@@ -476,7 +478,7 @@ function bindTopbar() {
   fps.value = state.fps;
   fps.addEventListener('change', () => { state.fps = Number(fps.value); persist(); library.sync(); });
 
-  $('#export').addEventListener('click', () => (state.mode === 'library' ? library.exportCurrent() : runExport()));
+  $('#export').addEventListener('click', () => (isLibrary() ? library.exportCurrent() : runExport()));
   $('#exportCancel').addEventListener('click', async () => {
     if (exportAbort) exportAbort.abort();
     else if (library.busy) await library.cancel();
@@ -512,7 +514,7 @@ function bindTopbar() {
 
   window.addEventListener('keydown', (e) => {
     if (e.target.closest?.('input, textarea, select')) return;
-    if (state.mode === 'library') {
+    if (isLibrary()) {
       if (e.code === 'Space' || e.code === 'Home') { e.preventDefault(); library.restart(); }
       return;
     }
@@ -647,7 +649,7 @@ async function boot() {
 
   prepare();
   fitStage();
-  setPlaying(state.mode !== 'library');
+  setPlaying(!isLibrary());
   syncMode(); // activates the Library if that's where we left off
   document.body.classList.add('is-ready');
   requestAnimationFrame(frame);

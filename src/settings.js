@@ -15,7 +15,7 @@ export const DEFAULTS = {
   format: '1920x1080',
   fps: 60,
 
-  // Intro, outro, mascot or library (switched in the top bar)
+  // Intro, outro, mascot, library or shots (switched in the top bar)
   mode: 'intro',
 
   // Mascot: the pixel character from uploadcare.com, one reaction per clip.
@@ -41,6 +41,9 @@ export const DEFAULTS = {
   libFormat: 'landscape',
   libScale: 1,
   libCamera: false, // film the card's 16:9 layout on an angled screen (library/camera.html)
+  // Shots: uploadcare.com's animations, the same panel fixed on library/shots
+  shotsCard: 0,
+  shotsFormat: 'portrait',
 
   // Content
   title: 'The infrastructure\nbehind every file',

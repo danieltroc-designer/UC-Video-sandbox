@@ -4,7 +4,8 @@ Animated video titles and booth-deck animations for Uploadcare. Four modes in th
 
 - **Intro / Outro** — the title sequence, drawn on canvas. Edit text, tweak motion and background in the sidebar, export an MP4 straight from the browser (Chrome, Edge or Safari 17+).
 - **Mascot** — the pixel character from uploadcare.com's CLI demo, one reaction per clip (wave, dance, yes, no, wow, love, think, sleep, party…), square by default for social posts. Add an entrance or exit or a pixel speech bubble. Exports an MP4 like the titles (with a green-screen option for keying), or with no background to lay over your own video: **MOV** (ProRes 4444 or HEVC with alpha, encoded on your Mac through the local server), **GIF** or **Lottie**.
-- **Library** — the cards from the Ecommerce Expo and Webflow booth decks, plus **Shots**: the animations on uploadcare.com. Previewed live and exported in desktop (16:9), mobile (9:16) or square (1:1), flat or with the Camera look. Library exports render on your machine, so run the studio locally for them. See [`library/README.md`](library/README.md).
+- **Library** — the cards from the Ecommerce Expo and Webflow booth decks, previewed live and exported in desktop (16:9), mobile (9:16) or square (1:1), flat or with the Camera look. Library exports render on your machine, so run the studio locally for them. See [`library/README.md`](library/README.md).
+- **Shots** — the animations on uploadcare.com, one component per card, in the same panel and with the same exports. See [`library/shots/README.md`](library/shots/README.md).
 
 ```bash
 npm install   # once — only the Library renderer needs it

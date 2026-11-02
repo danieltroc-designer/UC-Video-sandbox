@@ -3,9 +3,11 @@
 // local render API (render/api.mjs), which steps the card frame by frame in
 // headless Chrome — so it only works when the studio runs on this machine.
 // The Camera look films a card's 16:9 layout on an angled screen instead
-// (library/camera.html), in any output shape.
+// (library/camera.html), in any output shape. The Shots tab is the same panel
+// fixed on the Shots deck (uploadcare.com's animations), with its own card and
+// format.
 
-export const LIB_DECKS = { 'ecommerce-expo': 'Ecommerce Expo', 'webflow-booth': 'Webflow booth', shots: 'Shots' };
+export const LIB_DECKS = { 'ecommerce-expo': 'Ecommerce Expo', 'webflow-booth': 'Webflow booth' };
 export const LIB_FORMATS = {
   landscape: { label: 'Desktop', ratio: '16:9', w: 1920, h: 1080 },
   portrait: { label: 'Mobile', ratio: '9:16', w: 1080, h: 1920 },
@@ -36,6 +38,18 @@ function el(tag, attrs = {}, children = []) {
 export function createLibrary({ state, persist, modal }) {
   if (!LIB_DECKS[state.libDeck]) state.libDeck = LIB_DEFAULTS.libDeck;
   if (!LIB_FORMATS[state.libFormat]) state.libFormat = LIB_DEFAULTS.libFormat;
+  if (!LIB_FORMATS[state.shotsFormat]) state.shotsFormat = 'portrait';
+
+  // Library or Shots: which deck is on show, and where each one was left
+  let shots = false;
+  const deck = () => (shots ? 'shots' : state.libDeck);
+  const key = (k) => (shots ? `shots${k}` : `lib${k}`);
+  const at = {
+    get card() { return state[key('Card')]; },
+    set card(v) { state[key('Card')] = v; },
+    get format() { return state[key('Format')]; },
+    set format(v) { state[key('Format')] = v; },
+  };
 
   const frame = $('#libFrame');
   const panel = $('#library');
@@ -61,16 +75,18 @@ export function createLibrary({ state, persist, modal }) {
   const lookHint = el('p', { class: 'hint' });
   const scaleSeg = el('div', { class: 'segmented' }, [[1, '1080p'], [2, '4K']].map(([k, label]) =>
     el('button', { type: 'button', 'data-scale': k, text: label, onclick: () => { state.libScale = k; persist(); sync(); } })));
-  const exportOne = el('button', { class: 'btn primary', type: 'button', text: 'Export card', onclick: () => exportCards([state.libCard]) });
+  const exportOne = el('button', { class: 'btn primary', type: 'button', text: 'Export card', onclick: () => exportCards([at.card]) });
   const exportAll = el('button', { class: 'btn', type: 'button', onclick: () => exportCards(exportable().map((c) => c.index)) });
   const exportHint = el('p', { class: 'hint' });
 
   const field = (label, extra, ...body) => el('div', { class: 'field' }, [
     el('div', { class: 'field-head' }, [el('span', { class: 'field-label', text: label }), extra]), ...body]);
+  const title = el('span', { text: 'Library' });
+  const deckField = field('Deck', null, deckSeg);
   panel.append(el('details', { class: 'section', open: true }, [
-    el('summary', {}, [el('span', { text: 'Library' })]),
+    el('summary', {}, [title]),
     el('div', { class: 'section-body' }, [
-      field('Deck', null, deckSeg),
+      deckField,
       field('Cards', count, list),
       field('Format', null, formatSeg, formatHint),
       field('Look', null, lookSeg, lookHint),
@@ -84,7 +100,7 @@ export function createLibrary({ state, persist, modal }) {
   // shape; without it, only in the shapes it was composed for.
   const filmed = (c) => state.libCamera && c.formats.includes('landscape');
   const has = (c, format) => filmed(c) || c.formats.includes(format);
-  const exportable = () => cards.filter((c) => has(c, state.libFormat));
+  const exportable = () => cards.filter((c) => has(c, at.format));
 
   function renderList() {
     list.replaceChildren(...cards.map((c) => el('li', {}, el('button', {
@@ -103,15 +119,15 @@ export function createLibrary({ state, persist, modal }) {
   }
 
   function sync() {
-    for (const b of deckSeg.children) b.classList.toggle('is-active', b.dataset.deck === state.libDeck);
+    for (const b of deckSeg.children) b.classList.toggle('is-active', b.dataset.deck === deck());
     for (const b of list.querySelectorAll('.lib-card')) {
       const c = cards[Number(b.dataset.card)];
-      b.classList.toggle('is-active', c.index === state.libCard);
-      b.classList.toggle('is-off', !has(c, state.libFormat));
+      b.classList.toggle('is-active', c.index === at.card);
+      b.classList.toggle('is-off', !has(c, at.format));
     }
-    const card = cards[state.libCard];
+    const card = cards[at.card];
     for (const b of formatSeg.children) {
-      b.classList.toggle('is-active', b.dataset.format === state.libFormat);
+      b.classList.toggle('is-active', b.dataset.format === at.format);
       b.classList.toggle('is-off', !!card && !has(card, b.dataset.format));
     }
     formatHint.textContent = card && !filmed(card) && card.formats.length < 3 ? `${cardName(card)} comes in ${shapes(card.formats)}.` : '';
@@ -121,9 +137,9 @@ export function createLibrary({ state, persist, modal }) {
       : 'Filmed on an angled screen: hard cuts to each beat, a slow drift, depth of field and grain.';
     exportAll.textContent = `Export all ${exportable().length}`;
     for (const b of scaleSeg.children) b.classList.toggle('is-active', Number(b.dataset.scale) === state.libScale);
-    const f = LIB_FORMATS[state.libFormat];
+    const f = LIB_FORMATS[at.format];
     const size = `${f.w * state.libScale}×${f.h * state.libScale}`;
-    exportOne.disabled = api === false || !card || !has(card, state.libFormat);
+    exportOne.disabled = api === false || !card || !has(card, at.format);
     exportAll.disabled = api === false || !exportable().length;
     exportHint.textContent = api === false ? LOCAL_HINT : `${size} · ${state.fps} fps · saved to your Downloads folder.`;
   }
@@ -131,10 +147,10 @@ export function createLibrary({ state, persist, modal }) {
   // ------------------------------------------------------------- preview
 
   const srcFor = () => {
-    const { libDeck: deck, libCard: card, libFormat: format } = state;
+    const { card, format } = at;
     // before the deck's first load the cards aren't known yet: go by the setting, and correct it on load
     const camera = cards[card] ? filmed(cards[card]) : state.libCamera;
-    return camera ? `library/camera.html?deck=${deck}&card=${card}&format=${format}` : `library/${deck}/deck.html?card=${card}&format=${format}`;
+    return camera ? `library/camera.html?deck=${deck()}&card=${card}&format=${format}` : `library/${deck()}/deck.html?card=${card}&format=${format}`;
   };
 
   function load() {
@@ -146,11 +162,12 @@ export function createLibrary({ state, persist, modal }) {
   }
 
   frame.addEventListener('load', () => {
+    if (!active) return; // unloaded on the way out
     const w = frame.contentWindow;
     try {
       cards = w.__deckInfo();
-      if (!cards[state.libCard]) { state.libCard = 0; persist(); }
-      if (!has(cards[state.libCard], state.libFormat)) { state.libFormat = cards[state.libCard].formats[0]; persist(); }
+      if (!cards[at.card]) { at.card = 0; persist(); }
+      if (!has(cards[at.card], at.format)) { at.format = cards[at.card].formats[0]; persist(); }
       renderList();
       sync();
       if (srcFor() !== loadedSrc) load();
@@ -162,14 +179,14 @@ export function createLibrary({ state, persist, modal }) {
 
   function restart() {
     const w = frame.contentWindow;
-    if (w?.__deckRestart) { w.__deckRestart(state.libCard); startedAt = performance.now(); }
+    if (w?.__deckRestart) { w.__deckRestart(at.card); startedAt = performance.now(); }
     else { loadedSrc = ''; load(); }
   }
 
   function selectDeck(id) {
     if (state.libDeck === id) return;
     state.libDeck = id;
-    state.libCard = 0;
+    at.card = 0;
     persist();
     cards = [];
     renderList();
@@ -178,14 +195,14 @@ export function createLibrary({ state, persist, modal }) {
   }
 
   function selectCard(i) {
-    state.libCard = i;
+    at.card = i;
     // a card that doesn't come in the current shape switches to one it has
-    if (!has(cards[i], state.libFormat)) state.libFormat = cards[i].formats[0];
+    if (!has(cards[i], at.format)) at.format = cards[i].formats[0];
     persist();
     sync();
     // same deck and stage shape: switch in place, no reload
     const w = frame.contentWindow;
-    if (w?.__deckRestart && loadedSrc.startsWith(`library/${state.libDeck}/`) && loadedSrc.endsWith(`format=${state.libFormat}`)) {
+    if (w?.__deckRestart && loadedSrc.startsWith(`library/${deck()}/`) && loadedSrc.endsWith(`format=${at.format}`)) {
       w.__deckRestart(i);
       loadedSrc = srcFor();
       startedAt = performance.now();
@@ -193,10 +210,10 @@ export function createLibrary({ state, persist, modal }) {
   }
 
   function selectFormat(id) {
-    state.libFormat = id;
+    at.format = id;
     // …and a shape the current card doesn't come in switches to the first card that does
-    const card = cards[state.libCard];
-    if (card && !has(card, id)) state.libCard = (cards.find((c) => has(c, id)) ?? card).index;
+    const card = cards[at.card];
+    if (card && !has(card, id)) at.card = (cards.find((c) => has(c, id)) ?? card).index;
     persist();
     load();
     sync();
@@ -211,7 +228,7 @@ export function createLibrary({ state, persist, modal }) {
 
   function fit() {
     const wrap = $('#stageWrap').getBoundingClientRect();
-    const f = LIB_FORMATS[state.libFormat];
+    const f = LIB_FORMATS[at.format];
     const k = Math.min(wrap.width / f.w, wrap.height / f.h);
     frame.style.width = `${Math.floor(f.w * k)}px`;
     frame.style.height = `${Math.floor(f.h * k)}px`;
@@ -220,7 +237,7 @@ export function createLibrary({ state, persist, modal }) {
   // progress line under the preview; loops the card
   (function tick() {
     if (active) {
-      const card = cards[state.libCard];
+      const card = cards[at.card];
       if (card) {
         const t = (performance.now() - startedAt) / 1000;
         if (t >= card.duration) restart();
@@ -259,7 +276,8 @@ export function createLibrary({ state, persist, modal }) {
       return;
     }
     job = { cancelled: false };
-    const { libDeck: deck, libFormat: format, libScale: scale } = state;
+    const { format } = at;
+    const { libScale: scale } = state;
     const camera = Object.fromEntries(indices.map((i) => [i, filmed(cards[i])]));
     const fps = state.fps;
     const saved = [];
@@ -272,7 +290,7 @@ export function createLibrary({ state, persist, modal }) {
         modal.status(`${prefix}${name} — starting`);
         const { id } = await request('/api/render', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deck, card, format, fps, scale, camera: camera[card] }),
+          body: JSON.stringify({ deck: deck(), card, format, fps, scale, camera: camera[card] }),
         });
         job.id = id;
         for (;;) {
@@ -313,14 +331,20 @@ export function createLibrary({ state, persist, modal }) {
 
   return {
     get busy() { return !!job; },
-    setActive(on) {
+    // on: the Library tab, or with `shotsTab` the Shots tab. Off unloads the
+    // preview, so a filmed web page doesn't keep animating out of sight.
+    setActive(on, shotsTab = false) {
       active = on;
-      if (on) { load(); fit(); checkApi(); sync(); }
+      if (!on) { frame.src = 'about:blank'; loadedSrc = ''; return; }
+      if (shotsTab !== shots) { shots = shotsTab; cards = []; renderList(); }
+      title.textContent = shots ? 'Shots' : 'Library';
+      deckField.hidden = shots;
+      load(); fit(); checkApi(); sync();
     },
     restart,
     fit,
     sync,
     cancel,
-    exportCurrent: () => exportCards([state.libCard].filter((i) => cards[i] && has(cards[i], state.libFormat))),
+    exportCurrent: () => exportCards([at.card].filter((i) => cards[i] && has(cards[i], at.format))),
   };
 }

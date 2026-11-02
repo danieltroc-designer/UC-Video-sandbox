@@ -1,6 +1,6 @@
 # Shots
 
-The animations on uploadcare.com, one card per component, in the studio's **Library → Shots** tab. Every card plays in 16:9, 9:16 and 1:1 (unless it says otherwise), flat or through the Camera look.
+The animations on uploadcare.com, one card per component, in the studio's **Shots** tab. Every card plays in 16:9, 9:16 and 1:1 (unless it says otherwise), flat or through the Camera look.
 
 | File | |
 | --- | --- |
